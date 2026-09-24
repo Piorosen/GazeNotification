@@ -60,3 +60,12 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# GazeNoti
+## 빌드 산출물 (scripts/run.sh 의 -derivedDataPath)
+build/
+DerivedData/
+*.xcuserstate
+.DS_Store
+## 로컬 개발용 서명 키체인 (scripts/dev-signing.sh) — 개인 키가 들어 있으므로 절대 커밋하지 않음
+.signing/

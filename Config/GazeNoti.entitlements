@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened Runtime 에서 카메라 접근 허용 -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<!-- App Sandbox 는 의도적으로 끔: 샌드박스에서는 다른 앱(NotificationCenter)의 창을 Accessibility API 로 옮길 수 없음 -->
+</dict>
+</plist>
