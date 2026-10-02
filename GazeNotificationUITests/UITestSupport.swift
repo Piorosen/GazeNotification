@@ -19,8 +19,9 @@ class GazeUITestCase: XCTestCase {
         app?.terminate()
     }
 
-    func launch(reset: Bool) {
-        app.launchArguments = ["-uiTesting"] + (reset ? ["-uiTestingReset"] : [])
+    /// - Parameter language: 화면 언어 (테스트는 기본으로 한국어 문구로 확인하므로 시스템 언어와 관계없이 고정)
+    func launch(reset: Bool, language: String = "ko") {
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(\(language))"] + (reset ? ["-uiTestingReset"] : [])
         app.launch()
         XCTAssertTrue(app.statusItems.firstMatch.waitForExistence(timeout: 15), "메뉴 막대 아이콘이 생겨야 함")
     }

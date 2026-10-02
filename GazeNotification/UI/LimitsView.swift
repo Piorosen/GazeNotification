@@ -16,7 +16,8 @@ struct LimitsView: View {
                 .accessibilityIdentifier("limits.profile")
                 Text(model.profile.summary).font(.callout).foregroundStyle(.secondary)
                 if model.profile == .automatic {
-                    Text("지금: \(model.policy.applied.title)" + (model.policy.reason.map { " — \($0)" } ?? ""))
+                    Text(model.policy.reason.map { String(localized: "지금: \(model.policy.applied.title) — \($0)") }
+                         ?? String(localized: "지금: \(model.policy.applied.title)"))
                         .font(.callout)
                         .accessibilityIdentifier("limits.current")
                 }
@@ -43,9 +44,9 @@ struct LimitsView: View {
 
             Section("단계 전환") {
                 LimitSlider(id: "limits.stillAfter", title: "\"머묾\"으로 보는 시간", value: binding(\.stillAfter), range: PerformanceLimits.delayRange,
-                            step: 0.5, text: String(format: "%.1f초", limits.stillAfter))
+                            step: 0.5, text: String(localized: "\(fixed(limits.stillAfter))초"))
                 LimitSlider(id: "limits.awayAfter", title: "\"자리 비움\"으로 보는 시간", value: binding(\.awayAfter), range: PerformanceLimits.delayRange,
-                            step: 0.5, text: String(format: "%.1f초", limits.awayAfter))
+                            step: 0.5, text: String(localized: "\(fixed(limits.awayAfter))초"))
             }
 
             Section {
@@ -53,19 +54,18 @@ struct LimitsView: View {
                     HStack {
                         Text("얼굴 전체 검출")
                         Spacer()
-                        Text(limits.detectionInterval == 1 ? "매번" : "\(limits.detectionInterval)번에 1번")
+                        Text(limits.detectionInterval == 1 ? String(localized: "매번") : String(localized: "\(limits.detectionInterval)번에 1번"))
                             .monospacedDigit().foregroundStyle(.secondary)
                             .accessibilityIdentifier("limits.detectionInterval.value")
                     }
                 }
                 .accessibilityIdentifier("limits.detectionInterval")
                 LimitSlider(id: "limits.cpuLimit", title: "카메라·AI CPU 상한", value: binding(\.cpuLimit), range: PerformanceLimits.cpuLimitRange,
-                            step: 1, text: limits.cpuLimit == 0 ? "제한 없음" : String(format: "%.0f%%", limits.cpuLimit))
+                            step: 1, text: limits.cpuLimit == 0 ? String(localized: "제한 없음") : fixed(limits.cpuLimit, 0) + "%")
             } header: {
                 Text("연산 줄이기")
             } footer: {
-                FormNote("검출 사이 프레임은 직전 얼굴 위치를 눈에 맞춰 옮겨 랜드마크만 찾습니다 (검출 1회를 건너뛰면 CPU 약 9ms + Neural Engine 11ms 절약, 고개를 크게 돌리면 바로 다시 검출). "
-                     + "CPU 상한은 메인 스레드를 뺀 카메라·AI CPU(코어 1개 = 100%) 기준이며, 넘으면 처리 횟수를 자동으로 줄입니다.")
+                FormNote("검출 사이 프레임은 직전 얼굴 위치를 눈에 맞춰 옮겨 랜드마크만 찾습니다 (검출 1회를 건너뛰면 CPU 약 9ms + Neural Engine 11ms 절약, 고개를 크게 돌리면 바로 다시 검출). CPU 상한은 메인 스레드를 뺀 카메라·AI CPU(코어 1개 = 100%) 기준이며, 넘으면 처리 횟수를 자동으로 줄입니다.")
             }
 
             Section {
@@ -73,17 +73,15 @@ struct LimitsView: View {
                             range: PerformanceLimits.notificationCheckRange, step: 1, text: hz(limits.notificationCheckHz))
                 LimitSlider(id: "limits.cameraOff", title: "오래 자리 비우면 카메라 끄기", value: binding(\.cameraOffAfterAway),
                             range: PerformanceLimits.cameraOffRange, step: 1,
-                            text: limits.cameraOffAfterAway == 0 ? "끄지 않음" : "\(Int(limits.cameraOffAfterAway))분 후")
+                            text: limits.cameraOffAfterAway == 0 ? String(localized: "끄지 않음") : String(localized: "\(Int(limits.cameraOffAfterAway))분 후"))
             } header: {
                 Text("알림 감시 · 카메라")
             } footer: {
-                FormNote("알림 창 확인은 알림이 없을 때 창 서버에 묻는 횟수입니다 (낮추면 알림 센터 패널을 열 때 원위치가 조금 늦어짐). "
-                     + "카메라를 끈 뒤 키보드·마우스를 쓰면 다시 켭니다. 화면이 꺼지거나 잠기면 설정과 관계없이 카메라를 끕니다.")
+                FormNote("알림 창 확인은 알림이 없을 때 창 서버에 묻는 횟수입니다 (낮추면 알림 센터 패널을 열 때 원위치가 조금 늦어짐). 카메라를 끈 뒤 키보드·마우스를 쓰면 다시 켭니다. 화면이 꺼지거나 잠기면 설정과 관계없이 카메라를 끕니다.")
             }
 
             Section("예상") {
-                Text(String(format: "시선이 움직일 때 신경망 추론 약 %.1f회/s (얼굴 검출 %.1f + 랜드마크 %.1f)",
-                            limits.activeInferencesPerSecond, limits.activeHz / Double(limits.detectionInterval), limits.activeHz))
+                Text("시선이 움직일 때 신경망 추론 약 \(fixed(limits.activeInferencesPerSecond))회/s (얼굴 검출 \(fixed(limits.activeHz / Double(limits.detectionInterval))) + 랜드마크 \(fixed(limits.activeHz)))")
                     .monospacedDigit()
                     .accessibilityIdentifier("limits.estimate")
                 if model.profile == .custom {
@@ -103,7 +101,8 @@ struct LimitsView: View {
 
     private var supportedText: String {
         guard let supported = model.cameraFormat?.supportedFPS, !supported.isEmpty else { return "" }
-        return " (지금 카메라: " + supported.map(formatFPS).joined(separator: "·") + "fps)"
+        let list = supported.map(formatFPS).joined(separator: "·")
+        return " " + String(localized: "(지금 카메라: \(list)fps)")
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<PerformanceLimits, T>) -> Binding<T> {
@@ -112,7 +111,7 @@ struct LimitsView: View {
     }
 
     private func hz(_ value: Double) -> String {
-        value < 1 ? String(format: "%.1f회/s (%.1f초에 1번)", value, 1 / value) : String(format: "%.1f회/s", value)
+        value < 1 ? String(localized: "\(fixed(value))회/s (\(fixed(1 / value))초에 1번)") : String(localized: "\(fixed(value))회/s")
     }
 }
 
@@ -120,15 +119,35 @@ struct LimitsView: View {
 struct LimitSlider: View {
     /// 접근성 식별자 (UI 테스트). 값 글자는 "<id>.value"
     let id: String
-    let title: String
+    let title: Text
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
     let text: String
 
+    /// 제목이 글자 그대로(번역 키)인 경우
+    init(id: String, title: LocalizedStringKey, value: Binding<Double>, range: ClosedRange<Double>, step: Double, text: String) {
+        self.init(id: id, titleText: Text(title), value: value, range: range, step: step, text: text)
+    }
+
+    /// 제목이 이미 번역된 글자인 경우 (예: 특징 이름)
+    @_disfavoredOverload
+    init(id: String, title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, text: String) {
+        self.init(id: id, titleText: Text(verbatim: title), value: value, range: range, step: step, text: text)
+    }
+
+    private init(id: String, titleText: Text, value: Binding<Double>, range: ClosedRange<Double>, step: Double, text: String) {
+        self.id = id
+        title = titleText
+        _value = value
+        self.range = range
+        self.step = step
+        self.text = text
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Text(title).frame(width: 180, alignment: .leading)
+            title.frame(width: 180, alignment: .leading)
             // step 을 주면 macOS 슬라이더에 눈금이 빽빽하게 그려져서, 값만 반올림한다
             Slider(value: Binding(get: { value },
                                   set: { value = (($0 / step).rounded() * step).clamped(to: range) }),
@@ -146,9 +165,9 @@ struct LimitSlider: View {
 
 /// 그룹 Form 의 설명 문구 (기본은 오른쪽 정렬이라 왼쪽으로)
 struct FormNote: View {
-    let text: String
+    let text: LocalizedStringKey
 
-    init(_ text: String) { self.text = text }
+    init(_ text: LocalizedStringKey) { self.text = text }
 
     var body: some View {
         Text(text)

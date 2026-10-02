@@ -42,13 +42,14 @@ struct PipelineView: View {
             if rate == .paused {
                 Text(model.cameraPause?.title ?? rate.reason)
             } else {
-                Text("\(model.policy.applied.title) 프로필 · 목표 \(fps(model.targetHz))회/s 처리 · 카메라 \(formatFPS(p.deviceFPS))fps · "
-                     + (p.detectionInterval <= 1 ? "얼굴 검출 매번" : "얼굴 검출 \(p.detectionInterval)번에 1번"))
+                let detection = p.detectionInterval <= 1
+                    ? String(localized: "얼굴 검출 매번") : String(localized: "얼굴 검출 \(p.detectionInterval)번에 1번")
+                Text("\(model.policy.applied.title) 프로필 · 목표 \(fps(model.targetHz))회/s 처리 · 카메라 \(formatFPS(p.deviceFPS))fps · \(detection)")
             }
             Text("측정: 받은 프레임 \(fps(p.receivedFPS))/s · 처리 \(fps(p.processedFPS))/s · 검출 \(fps(p.detectFPS))/s · 얼굴 있음 \(fps(p.featuresFPS))/s")
                 .foregroundStyle(.secondary)
             if live.uptime > 5 {
-                Text("실행 \(duration(live.uptime)) 동안 평균 \(fps(live.averageProcessedFPS))회/s · " + rateShareText(live.rateShare))
+                Text("실행 \(duration(live.uptime)) 동안 평균 \(fps(live.averageProcessedFPS))회/s · \(rateShareText(live.rateShare))")
                     .foregroundStyle(.secondary)
             }
         }
@@ -70,35 +71,35 @@ struct PipelineView: View {
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
                 stageRow("① 카메라",
-                         format.map { "\($0.width)×\($0.height) \($0.sourceFormat == "yuvs" ? "비압축" : $0.sourceFormat) → \($0.outputFormat)" } ?? "—",
-                         detail: "UVC 드라이버가 프레임 전달 (디코딩 없음)",
+                         format.map { "\($0.width)×\($0.height) \($0.sourceFormat == "yuvs" ? String(localized: "비압축") : $0.sourceFormat) → \($0.outputFormat)" } ?? "—",
+                         detail: String(localized: "UVC 드라이버가 프레임 전달 (디코딩 없음)"),
                          rate: p.receivedFPS, time: nil)
                 stageRow("② 얼굴 검출", "VNDetectFaceRectangles · \(devices.detection)",
-                         detail: p.detectionInterval <= 1 ? "이미지 전체 → 얼굴 상자 + 머리 방향(yaw)"
-                             : "\(p.detectionInterval)번에 1번 · 그 사이는 직전 얼굴 상자를 눈에 맞춰 옮김",
+                         detail: p.detectionInterval <= 1 ? String(localized: "이미지 전체 → 얼굴 상자 + 머리 방향(yaw)")
+                             : String(localized: "\(p.detectionInterval)번에 1번 · 그 사이는 직전 얼굴 상자를 눈에 맞춰 옮김"),
                          rate: p.detectFPS, time: (p.detectWallMs, p.detectCPUms))
                 if let landmarksDevice = devices.landmarks(for: model.analysisMode) {
-                    stageRow("③ 랜드마크", "VNDetectFaceLandmarks \(model.analysisMode == .light ? 65 : 76)점 · \(landmarksDevice)",
-                             detail: "얼굴 상자 안 → 눈·동공·코 등 점 좌표",
+                    stageRow("③ 랜드마크", String(localized: "VNDetectFaceLandmarks \(model.analysisMode == .light ? 65 : 76)점 · \(landmarksDevice)"),
+                             detail: String(localized: "얼굴 상자 안 → 눈·동공·코 등 점 좌표"),
                              rate: p.landmarksFPS, time: (p.landmarksWallMs, p.landmarksCPUms))
                 } else {
-                    stageRow("③ 랜드마크", "사용 안 함 (머리 방향 방식)", detail: "얼굴 상자와 yaw 만 사용",
+                    stageRow("③ 랜드마크", String(localized: "사용 안 함 (머리 방향 방식)"), detail: String(localized: "얼굴 상자와 yaw 만 사용"),
                              rate: 0, time: nil)
                 }
-                stageRow("④ 특징 계산", "기하 계산 · CPU",
-                         detail: "점 좌표 → 코 방향·동공 위치·얼굴 위치",
+                stageRow("④ 특징 계산", String(localized: "기하 계산 · CPU"),
+                         detail: String(localized: "점 좌표 → 코 방향·동공 위치·얼굴 위치"),
                          rate: p.featuresFPS, time: (p.featuresCPUms, p.featuresCPUms))
                 stageRow("⑤ 시선 추정", "\(model.activeEstimatorKind.title) · CPU",
-                         detail: "특징 \(model.analysisMode.features.count)개 → 화면 가로 위치 x",
+                         detail: String(localized: "특징 \(model.analysisMode.features.count)개 → 화면 가로 위치 x"),
                          rate: p.featuresFPS, time: nil)
-                stageRow("⑥ 스무딩", "One Euro 필터 · CPU",
-                         detail: "느리게 움직이면 강하게, 빠르면 약하게 평활",
+                stageRow("⑥ 스무딩", String(localized: "One Euro 필터 · CPU"),
+                         detail: String(localized: "느리게 움직이면 강하게, 빠르면 약하게 평활"),
                          rate: p.featuresFPS, time: nil)
             }
         }
     }
 
-    private func stageRow(_ name: String, _ op: String, detail: String, rate: Double,
+    private func stageRow(_ name: LocalizedStringKey, _ op: String, detail: String, rate: Double,
                           time: (wall: Double, cpu: Double)?) -> some View {
         GridRow(alignment: .top) {
             Text(name).fontWeight(.medium)
@@ -147,11 +148,13 @@ struct PipelineView: View {
                     }
                 }
                 let sum = b.terms.reduce(0) { $0 + $1.contribution }
-                let interpolated = b.regressionOutput == nil ? "" : String(format: "  →  점별 보간 %.1f%%", b.raw * 100)
                 let regression = b.regressionOutput ?? b.raw
-                let adjustedText = abs(b.adjusted - b.raw) > 0.0005 ? String(format: "  →  수동 조정 %.1f%%", b.adjusted * 100) : ""
-                Text(String(format: "%.1f%% %@ %.1f%% = %.1f%%", b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, regression * 100)
-                     + interpolated + adjustedText + String(format: "  →  필터 후 %.1f%%", b.filtered * 100))
+                // 평균 ± 기여 합 = 회귀 출력 → (점별 보간) → (수동 조정) → 필터 후
+                let steps = [String(format: "%.1f%% %@ %.1f%% = %.1f%%", b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, regression * 100)]
+                    + (b.regressionOutput == nil ? [] : [String(localized: "점별 보간 \(percentText(b.raw))")])
+                    + (abs(b.adjusted - b.raw) > 0.0005 ? [String(localized: "수동 조정 \(percentText(b.adjusted))")] : [])
+                    + [String(localized: "필터 후 \(percentText(b.filtered))")]
+                Text(steps.joined(separator: "  →  "))
                     .fontWeight(.medium)
                 let moverWidth = model.liveStats.mover?.screenWidth ?? 0
                 let width = moverWidth > 0 ? moverWidth : Double(NSScreen.main?.frame.width ?? 0)
@@ -174,9 +177,8 @@ struct PipelineView: View {
         let live = model.liveStats
         return SectionBox("알림 배치 (Accessibility)") {
             if let mover = live.mover {
-                Text(mover.mode.rawValue)
-                Text("창 확인 \(fps(live.windowChecksPerSecond))회/s (창 서버, AX 아님) · "
-                     + "AX 호출 \(fps(live.axCallsPerSecond))회/s · 창 이동 \(fps(live.movesPerSecond))회/s")
+                Text(mover.mode.title)
+                Text("창 확인 \(fps(live.windowChecksPerSecond))회/s (창 서버, AX 아님) · AX 호출 \(fps(live.axCallsPerSecond))회/s · 창 이동 \(fps(live.movesPerSecond))회/s")
                     .foregroundStyle(.secondary)
                 if let slot = mover.slotX, mover.screenWidth > 0 {
                     let fraction = (slot - mover.screenMinX) / mover.screenWidth
@@ -227,7 +229,8 @@ struct PipelineView: View {
 
     private func duration(_ seconds: TimeInterval) -> String {
         let minutes = Int(seconds / 60)
-        return minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분" : (minutes > 0 ? "\(minutes)분" : "\(Int(seconds))초")
+        if minutes >= 60 { return String(localized: "\(minutes / 60)시간 \(minutes % 60)분") }
+        return minutes > 0 ? String(localized: "\(minutes)분") : String(localized: "\(Int(seconds))초")
     }
 
     private func rateShareText(_ share: [TrackingRate: Double]) -> String {
@@ -256,10 +259,10 @@ struct PipelineView: View {
 
 /// 제목 + 내용 묶음
 private struct SectionBox<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
     }

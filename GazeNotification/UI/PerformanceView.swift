@@ -12,12 +12,14 @@ struct PerformanceView: View {
         let title: String
         var id: Int { seconds }
     }
-    private static let ranges = [ChartRange(seconds: 60, title: "1분"), ChartRange(seconds: 300, title: "5분"), ChartRange(seconds: 600, title: "10분")]
+    private static let ranges = [ChartRange(seconds: 60, title: String(localized: "1분")),
+                                 ChartRange(seconds: 300, title: String(localized: "5분")),
+                                 ChartRange(seconds: 600, title: String(localized: "10분"))]
 
     private var cpuRule: (value: Double, label: String)? {
         let limit = model.limits.cpuLimit
         guard limit > 0 else { return nil }
-        return (limit, "카메라·AI 상한 \(Int(limit))%")
+        return (limit, String(localized: "카메라·AI 상한 \(Int(limit))%"))
     }
 
     var body: some View {
@@ -49,21 +51,21 @@ struct PerformanceView: View {
                 ChartCard(title: "CPU 사용량", unit: "%", note: "코어 1개 = 100%. 카메라·AI = 메인 스레드를 뺀 나머지(카메라 수신·Vision·Neural Engine 드라이버)") {
                     HistoryChart(id: "cpu", samples: samples, domain: domain, unit: "%", selection: $selection,
                                  series: [
-                                     .init(name: "앱 전체", color: ChartPalette.slot1) { $0.processCPU },
-                                     .init(name: "카메라·AI", color: ChartPalette.slot2) { $0.trackingCPU },
-                                     .init(name: "메인 스레드 (UI·알림 감시)", color: ChartPalette.slot3) { $0.mainCPU },
+                                     .init(name: String(localized: "앱 전체"), color: ChartPalette.slot1) { $0.processCPU },
+                                     .init(name: String(localized: "카메라·AI"), color: ChartPalette.slot2) { $0.trackingCPU },
+                                     .init(name: String(localized: "메인 스레드 (UI·알림 감시)"), color: ChartPalette.slot3) { $0.mainCPU },
                                  ],
                                  rule: cpuRule,
                                  format: { String(format: "%.1f%%", $0) })
                 }
 
-                ChartCard(title: "처리 횟수", unit: "회/s", note: "처리 = Vision 을 돌린 프레임, 얼굴 검출 = 그중 전체 검출(나머지는 추적), 목표 = 지금 정책이 요청한 값") {
-                    HistoryChart(id: "rate", samples: samples, domain: domain, unit: "회/s", selection: $selection,
+                ChartCard(title: "처리 횟수", unit: String(localized: "회/s"), note: "처리 = Vision 을 돌린 프레임, 얼굴 검출 = 그중 전체 검출(나머지는 추적), 목표 = 지금 정책이 요청한 값") {
+                    HistoryChart(id: "rate", samples: samples, domain: domain, unit: String(localized: "회/s"), selection: $selection,
                                  series: [
-                                     .init(name: "처리", color: ChartPalette.slot1) { $0.processedHz },
-                                     .init(name: "얼굴 검출", color: ChartPalette.slot2) { $0.detectHz },
-                                     .init(name: "카메라 프레임", color: ChartPalette.slot3) { $0.receivedFPS },
-                                     .init(name: "목표", color: ChartPalette.reference, dashed: true) { $0.targetHz },
+                                     .init(name: String(localized: "처리"), color: ChartPalette.slot1) { $0.processedHz },
+                                     .init(name: String(localized: "얼굴 검출"), color: ChartPalette.slot2) { $0.detectHz },
+                                     .init(name: String(localized: "카메라 프레임"), color: ChartPalette.slot3) { $0.receivedFPS },
+                                     .init(name: String(localized: "목표"), color: ChartPalette.reference, dashed: true) { $0.targetHz },
                                  ],
                                  format: { String(format: "%.1f", $0) })
                 }
@@ -71,8 +73,8 @@ struct PerformanceView: View {
                 ChartCard(title: "1회 처리 시간", unit: "ms", note: "Neural Engine 결과를 기다리는 시간 포함. 처리하지 않은 시각은 비어 있음") {
                     HistoryChart(id: "time", samples: samples, domain: domain, unit: "ms", selection: $selection,
                                  series: [
-                                     .init(name: "얼굴 검출", color: ChartPalette.slot1) { $0.detectHz > 0 ? $0.detectMs : nil },
-                                     .init(name: "랜드마크", color: ChartPalette.slot2) { $0.processedHz > 0 ? $0.landmarksMs : nil },
+                                     .init(name: String(localized: "얼굴 검출"), color: ChartPalette.slot1) { $0.detectHz > 0 ? $0.detectMs : nil },
+                                     .init(name: String(localized: "랜드마크"), color: ChartPalette.slot2) { $0.processedHz > 0 ? $0.landmarksMs : nil },
                                  ],
                                  format: { String(format: "%.1fms", $0) })
                 }
@@ -104,7 +106,7 @@ private struct PolicyHeader: View {
             }
             HStack(spacing: 14) {
                 Label(power.powerText, systemImage: power.onBattery ? "battery.75percent" : "powerplug")
-                Label("저전력 모드 \(power.lowPowerMode ? "켬" : "끔")", systemImage: "leaf")
+                Label(power.lowPowerMode ? String(localized: "저전력 모드 켬") : String(localized: "저전력 모드 끔"), systemImage: "leaf")
                 Label("발열 \(power.thermalText)", systemImage: "thermometer.medium")
                 Label("추적: \(model.trackingRate.title)", systemImage: "eye")
             }
@@ -113,8 +115,10 @@ private struct PolicyHeader: View {
             if let pause = model.cameraPause {
                 Label(pause.title, systemImage: "zzz").font(.callout)
             } else if model.governorScale < 0.999 {
-                Label(String(format: "카메라·AI CPU 가 상한을 넘어 처리 횟수를 %.0f%% 로 줄이는 중", model.governorScale * 100)
-                      + (model.governorScale <= 0.051 ? " — 상한이 카메라 수신 비용보다 낮아 최소 속도로 동작" : ""),
+                let scale = fixed(model.governorScale * 100, 0)
+                Label(model.governorScale <= 0.051
+                      ? String(localized: "카메라·AI CPU 가 상한을 넘어 처리 횟수를 \(scale)% 로 줄이는 중 — 상한이 카메라 수신 비용보다 낮아 최소 속도로 동작")
+                      : String(localized: "카메라·AI CPU 가 상한을 넘어 처리 횟수를 \(scale)% 로 줄이는 중"),
                       systemImage: "speedometer")
                     .font(.callout)
             }
@@ -158,9 +162,9 @@ struct ChartSeries: Identifiable {
 }
 
 private struct ChartCard<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let unit: String
-    let note: String
+    let note: LocalizedStringKey
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -266,7 +270,7 @@ struct HistoryChart: View {
             .accessibilityElement(children: .ignore)
             .accessibilityIdentifier("chart.\(id)")
             .accessibilityLabel("\(samples.count)개 기록")
-            .accessibilityValue(selected.map { "선택 " + Self.timeFormatter.string(from: $0.time) } ?? "\(samples.count)")
+            .accessibilityValue(selected.map { String(localized: "선택 \(Self.timeFormatter.string(from: $0.time))") } ?? "\(samples.count)")
         }
     }
 
@@ -349,14 +353,15 @@ private struct SummaryGrid: View {
             Text("기간 평균").font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 4) {
                 GridRow {
-                    stat("앱 전체 CPU", String(format: "%.1f%%", average(\.processCPU)))
-                    stat("카메라·AI CPU", String(format: "%.1f%%", average(\.trackingCPU)))
-                    stat("메인 스레드 CPU", String(format: "%.1f%%", average(\.mainCPU)))
+                    stat("앱 전체 CPU", fixed(average(\.processCPU)) + "%")
+                    stat("카메라·AI CPU", fixed(average(\.trackingCPU)) + "%")
+                    stat("메인 스레드 CPU", fixed(average(\.mainCPU)) + "%")
                 }
                 GridRow {
-                    stat("처리", String(format: "%.1f회/s", processed))
-                    stat("얼굴 검출", processed > 0 ? String(format: "%.1f회/s (%.0f%%)", detected, detected / processed * 100) : "—")
-                    stat("알림 창 확인", String(format: "%.1f회/s · AX %.1f회/s", average(\.notificationChecksPerSecond), average(\.axCallsPerSecond)))
+                    stat("처리", String(localized: "\(fixed(processed))회/s"))
+                    stat("얼굴 검출", processed > 0
+                         ? String(localized: "\(fixed(detected))회/s (\(fixed(detected / processed * 100, 0))%)") : "—")
+                    stat("알림 창 확인", String(localized: "\(fixed(average(\.notificationChecksPerSecond)))회/s · AX \(fixed(average(\.axCallsPerSecond)))회/s"))
                 }
             }
             Text(TrackingRate.allCases.compactMap { rate in
@@ -371,7 +376,7 @@ private struct SummaryGrid: View {
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func stat(_ title: String, _ value: String) -> some View {
+    private func stat(_ title: LocalizedStringKey, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.callout.weight(.medium)).monospacedDigit()

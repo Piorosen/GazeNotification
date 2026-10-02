@@ -31,7 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 760),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
-        window.title = "GazeNotification 설정"
+        window.title = String(localized: "GazeNotification 설정")
         window.identifier = NSUserInterfaceItemIdentifier("settings")
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 680, height: 520)

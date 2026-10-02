@@ -148,7 +148,7 @@ final class CalibrationController {
 
             let result: Result<CalibrationOutcome, CalibrationFailure> = missing.isEmpty
                 ? plan.evaluate(samples)
-                : .failure(CalibrationFailure(message: "얼굴이 충분히 감지되지 않았습니다. 카메라 위치와 조명을 확인한 뒤 다시 시도하세요."))
+                : .failure(CalibrationFailure(message: String(localized: "얼굴이 충분히 감지되지 않았습니다. 카메라 위치와 조명을 확인한 뒤 다시 시도하세요.")))
             switch result {
             case .success(let outcome):
                 state.phase = .done(outcome.message)
@@ -251,17 +251,17 @@ private struct CalibrationView: View {
     private var title: String {
         switch state.phase {
         case .intro: state.plan.title
-        case .moving, .collecting: "점을 바라보세요 (\(state.targetIndex + 1)/\(state.targets.count))"
-        case .done: "\(state.plan.title) 완료"
-        case .failed: "\(state.plan.title) 실패"
+        case .moving, .collecting: String(localized: "점을 바라보세요 (\(state.targetIndex + 1)/\(state.targets.count))")
+        case .done: String(localized: "\(state.plan.title) 완료")
+        case .failed: String(localized: "\(state.plan.title) 실패")
         }
     }
 
     private var subtitle: String {
         switch state.phase {
         case .intro: state.plan.intro
-        case .moving: "점으로 시선을 옮기세요"
-        case .collecting: "그대로 바라보세요…"
+        case .moving: String(localized: "점으로 시선을 옮기세요")
+        case .collecting: String(localized: "그대로 바라보세요…")
         case .done(let message), .failed(let message): message
         }
     }

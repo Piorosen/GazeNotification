@@ -90,17 +90,20 @@ tccutil reset Camera party.udon.GazeNotification
 ### 테스트
 
 ```sh
-scripts/test.sh unit   # 단위 테스트 (Swift Testing, 화면을 건드리지 않음, 약 1초)
+scripts/test.sh unit   # 단위 테스트 (Swift Testing, 화면을 건드리지 않음, 약 3초)
 scripts/test.sh ui     # UI 테스트 (XCUITest) — ⚠️ 실제 화면에서 마우스·키보드를 움직인다, 약 5분
 scripts/test.sh        # 둘 다
 ```
 
 - **단위 테스트**(`GazeNotificationTests`): 회귀·곡선·점별 보간·교차검증, 보정 저장(NaN 포함)·예전 형식 이전, 수동 보정·구역,
   프로필 규칙·제한값·CPU 상한 수렴, 처리 간격(장치 fps 와 무관하게 목표 ±5%)·30fps 풀림 감시·장치 fps 선택,
-  추적 상자·알림 슬롯 계산, 가상 카메라, AppModel 설정 전환·저장·손상된 값 처리.
+  추적 상자·알림 슬롯 계산, 가상 카메라, AppModel 설정 전환·저장·손상된 값 처리,
+  언어팩(세 언어가 모두 들어 있는지, 언어마다 같은 문구인지, 숫자 자리표시자·% 기호가 원문과 같은지, 번역에 한글이 남지 않았는지, 언어 선택 저장).
 - **UI 테스트**(`GazeNotificationUITests`): 앱을 `-uiTesting` 모드로 띄운다 — 카메라 대신 가상 사용자(보정 중엔 화면의 점을 보고,
   그 밖엔 좌우로 오감), 알림 창 이동·권한 요청 없음, 설정은 별도 저장소. 메뉴 상태·켜고 끄기·위치 기준·미리보기,
-  설정 창 네 탭의 컨트롤, 그래프 기록·마우스 선택, 보정(전체·빠른 위치 맞춤·ESC 취소)을 끝에서 끝까지, 다시 실행 후 설정 유지.
+  설정 창 네 탭의 컨트롤, 그래프 기록·마우스 선택, 보정(전체·빠른 위치 맞춤·ESC 취소)을 끝에서 끝까지, 다시 실행 후 설정 유지,
+  언어 선택 → 다시 시작 안내, 영어·일본어·중국어로 띄웠을 때 메뉴와 설정 창 네 탭에 한글이 남지 않는지.
+  테스트는 `-AppleLanguages (ko)` 로 띄워 시스템 언어와 관계없이 같은 문구로 확인한다.
 - macOS UI 테스트에는 iOS 시뮬레이터 같은 가상 화면이 없어 로그인한 화면을 직접 조작한다. 그래서 확인을 묻고 시작한다
   (`GAZE_UI_TEST_OK=1` 이면 묻지 않음). 실행 중인 일반 GazeNotification 은 건드리지 않는다.
 - Apple Development 인증서가 없으면 ad-hoc 서명 + Hardened Runtime 끔으로 빌드한다 (결과: `build/tests/*.xcresult`).
@@ -158,6 +161,17 @@ scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automa
 곡선 회귀는 세제곱 항을 쓴다. 고개를 돌린 각도와 화면 위치의 관계(tan)는 좌우 대칭으로 휘어 제곱 항으로는 못 맞춘다
 (합성 데이터 교차검증: 선형 3.8% · 제곱 8.3% · 세제곱 1.8%).
 
+## 언어
+
+한국어 · English · 日本語 · 简体中文. 메뉴의 **언어**에서 고르고 다시 시작하면 바뀐다 ("시스템 설정 따름"이면 macOS 의 언어 순서를 따른다 —
+시스템 언어 목록에서 영어가 한국어보다 위에 있으면 영어로 뜬다).
+
+- 문구는 String Catalog(`GazeNotification/Localizable.xcstrings`, 카메라 권한 안내는 `InfoPlist.xcstrings`)에 있다. 한국어가 개발 언어라 키가 곧 한국어 문구다.
+- 숫자를 끼워 넣는 문구는 `"\(fixed(v))회/s"` 처럼 숫자를 미리 글자로 만들어 넣는다 → 키 `"%@회/s"`, 언어마다 어순을 바꿀 수 있다 (`%1$@`, `%2$@`).
+- 새 문구를 추가하면 빌드할 때 카탈로그에 키가 생긴다. Xcode 에서 카탈로그를 열어 번역을 채우고 `scripts/check-localization.sh` 로 빠진 번역을 확인한다.
+- 언어팩 추가: 프로젝트 정보 → Localizations 에 언어를 더하고 카탈로그에서 번역을 채운다. `AppLanguage` 에 항목을 더하면 메뉴에서 고를 수 있다.
+- 진단 로그(`gazenotification.log`)는 개발자용이라 한국어 그대로 남긴다.
+
 ## 메뉴 설정
 
 | 항목 | 설명 |
@@ -165,6 +179,7 @@ scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automa
 | 위치 기준 | 시선 / 마우스 커서 (카메라 없이 쓰는 대안) |
 | 알림이 떠 있는 동안 계속 따라오기 | 끄면 처음 뜰 때만 옮긴다 |
 | 화면 상단에 알림 위치 표시 | 추정 시선 위치를 얇은 막대로 표시 (보정 확인용) |
+| 언어 | 시스템 설정 따름 / 한국어 / English / 日本語 / 简体中文 (다시 시작하면 적용) |
 | 진단 → 알림 창 AX 구조 저장 | `~/Library/Logs/GazeNotification/ax-dump.txt` (알림 본문은 길이만 기록) |
 
 로그: `~/Library/Logs/GazeNotification/gazenotification.log`. 처음 잡힌 배너의 AX 구조는 `ax-dump-banner.txt` 에 저장된다.
@@ -174,6 +189,7 @@ scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automa
 ```
 GazeNotification/
   App/            GazeNotificationApp (MenuBarExtra), AppModel (전체 연결·설정·정책·CPU 상한)
+  Support/        AppLanguage (언어 선택), AppEnvironment (실행 환경), Formatting (번역 문구용 숫자 글자), Log, …
   Camera/         CameraService — 캡처 세션, 장치 선택, 포맷·장치 fps·시간 기준 처리·fps 감시,
                   FrameScheduling (처리 간격·감시·fps 선택), SimulatedFaceSource (UI 테스트용 가상 카메라)
   Gaze/           FaceFeatureExtractor (Vision, 분석 방식·추적), AIMode (방식·장치·모델 종류),
@@ -187,6 +203,7 @@ GazeNotification/
                   설정 창(SettingsWindow · PerformanceView · LimitsView · AIModeView · CalibrationAdjustView)
   Assets.xcassets 앱 아이콘 (swift scripts/make-icon.swift 로 다시 그림)
 Config/           Info.plist, entitlements (샌드박스 끔 — 다른 앱 창을 옮기려면 필요)
+GazeNotification/Localizable.xcstrings, InfoPlist.xcstrings   언어팩 (String Catalog)
 GazeNotificationTests/    단위 테스트 (Swift Testing)
 GazeNotificationUITests/  UI 테스트 (XCUITest)
 ```

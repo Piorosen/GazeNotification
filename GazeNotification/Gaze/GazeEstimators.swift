@@ -30,8 +30,9 @@ struct GazeEstimator: Codable, Equatable {
             breakdown.regressionOutput = breakdown.raw
             breakdown.raw = Self.interpolate(breakdown.raw, knots)
         }
-        breakdown.modelName = String(format: "%@ (학습 오차 %.1f%%%@)", kind.title, trainingRMSE * 100,
-                                     crossValidationRMSE.map { String(format: " · 교차검증 %.1f%%", $0 * 100) } ?? "")
+        breakdown.modelName = crossValidationRMSE.map {
+            String(localized: "\(kind.title) (학습 오차 \(percentText(trainingRMSE)) · 교차검증 \(percentText($0)))")
+        } ?? String(localized: "\(kind.title) (학습 오차 \(percentText(trainingRMSE)))")
         return breakdown
     }
 

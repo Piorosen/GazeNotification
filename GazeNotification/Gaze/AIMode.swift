@@ -14,25 +14,25 @@ enum AnalysisMode: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .precise: "정밀 · 랜드마크 76점"
-        case .light: "가벼움 · 랜드마크 65점"
-        case .headPose: "머리 방향만 · 얼굴 검출"
+        case .precise: String(localized: "정밀 · 랜드마크 76점")
+        case .light: String(localized: "가벼움 · 랜드마크 65점")
+        case .headPose: String(localized: "머리 방향만 · 얼굴 검출")
         }
     }
 
     var shortTitle: String {
         switch self {
-        case .precise: "76점"
-        case .light: "65점"
-        case .headPose: "머리 방향"
+        case .precise: String(localized: "76점")
+        case .light: String(localized: "65점")
+        case .headPose: String(localized: "머리 방향")
         }
     }
 
     var detail: String {
         switch self {
-        case .precise: "코 방향 · 동공 위치 · 얼굴 위치 · 머리 yaw 를 모두 씁니다. 눈동자 움직임까지 반영해 가장 정확합니다."
-        case .light: "점이 적은 랜드마크 모델. 같은 특징을 쓰고, 동공 점은 덜 정밀할 수 있습니다."
-        case .headPose: "랜드마크 없이 얼굴 상자와 머리 방향만 씁니다. 고개를 돌려 보는 경우에 맞고, 눈만 움직이면 따라가지 못합니다. 매 프레임 얼굴 검출이 필요해 검출 간격 설정은 쓰지 않습니다."
+        case .precise: String(localized: "코 방향 · 동공 위치 · 얼굴 위치 · 머리 yaw 를 모두 씁니다. 눈동자 움직임까지 반영해 가장 정확합니다.")
+        case .light: String(localized: "점이 적은 랜드마크 모델. 같은 특징을 쓰고, 동공 점은 덜 정밀할 수 있습니다.")
+        case .headPose: String(localized: "랜드마크 없이 얼굴 상자와 머리 방향만 씁니다. 고개를 돌려 보는 경우에 맞고, 눈만 움직이면 따라가지 못합니다. 매 프레임 얼굴 검출이 필요해 검출 간격 설정은 쓰지 않습니다.")
         }
     }
 
@@ -61,7 +61,7 @@ enum ComputePreference: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .automatic: "자동 (Neural Engine 우선)"
+        case .automatic: String(localized: "자동 (Neural Engine 우선)")
         case .neuralEngine: "Neural Engine"
         case .gpu: "GPU"
         case .cpu: "CPU"
@@ -70,9 +70,9 @@ enum ComputePreference: String, CaseIterable, Identifiable, Codable {
 
     var detail: String {
         switch self {
-        case .automatic, .neuralEngine: "전력 효율이 가장 좋습니다. 없으면 GPU → CPU 순."
-        case .gpu: "Neural Engine 이 없는 Mac 이나 비교용. 전력을 더 씁니다."
-        case .cpu: "비교용. CPU 사용량이 크게 늘어납니다."
+        case .automatic, .neuralEngine: String(localized: "전력 효율이 가장 좋습니다. 없으면 GPU → CPU 순.")
+        case .gpu: String(localized: "Neural Engine 이 없는 Mac 이나 비교용. 전력을 더 씁니다.")
+        case .cpu: String(localized: "비교용. CPU 사용량이 크게 늘어납니다.")
         }
     }
 
@@ -104,19 +104,19 @@ enum EstimatorKind: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .linear: "선형 회귀"
-        case .curve: "곡선 회귀 (3차)"
-        case .piecewise: "점별 보간"
-        case .formula: "기본 추정식"
+        case .linear: String(localized: "선형 회귀")
+        case .curve: String(localized: "곡선 회귀 (3차)")
+        case .piecewise: String(localized: "점별 보간")
+        case .formula: String(localized: "기본 추정식")
         }
     }
 
     var detail: String {
         switch self {
-        case .linear: "x = 평균 + Σ 기울기 × 특징. 가장 단순하고 안정적."
-        case .curve: "특징의 세제곱 항을 더해 화면 양 끝으로 갈수록 휘는 관계(고개를 돌린 각도 ↔ 위치)까지 맞춥니다. 보정 점이 적으면 과적합될 수 있음."
-        case .piecewise: "선형 회귀가 각 보정 점에서 낸 값을 그 점의 실제 위치로 다시 맞추고, 점 사이는 직선으로 잇습니다."
-        case .formula: "보정 없이 쓰는 대략적인 식 (카메라가 모니터 위 가운데, 정면 약 70cm 가정)."
+        case .linear: String(localized: "x = 평균 + Σ 기울기 × 특징. 가장 단순하고 안정적.")
+        case .curve: String(localized: "특징의 세제곱 항을 더해 화면 양 끝으로 갈수록 휘는 관계(고개를 돌린 각도 ↔ 위치)까지 맞춥니다. 보정 점이 적으면 과적합될 수 있음.")
+        case .piecewise: String(localized: "선형 회귀가 각 보정 점에서 낸 값을 그 점의 실제 위치로 다시 맞추고, 점 사이는 직선으로 잇습니다.")
+        case .formula: String(localized: "보정 없이 쓰는 대략적인 식 (카메라가 모니터 위 가운데, 정면 약 70cm 가정).")
         }
     }
 }
@@ -137,5 +137,5 @@ enum EstimatorChoice: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var title: String { kind?.title ?? "자동 (오차가 가장 작은 모델)" }
+    var title: String { kind?.title ?? String(localized: "자동 (오차가 가장 작은 모델)") }
 }

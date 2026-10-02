@@ -12,17 +12,17 @@ struct PowerState: Equatable {
     var screenUnavailable = false
 
     var powerText: String {
-        guard onBattery else { return batteryLevel.map { "전원 연결 (\($0)%)" } ?? "전원 연결" }
-        return batteryLevel.map { "배터리 \($0)%" } ?? "배터리"
+        guard onBattery else { return batteryLevel.map { String(localized: "전원 연결 (\($0)%)") } ?? String(localized: "전원 연결") }
+        return batteryLevel.map { String(localized: "배터리 \($0)%") } ?? String(localized: "배터리")
     }
 
     var thermalText: String {
         switch thermal {
-        case .nominal: "정상"
-        case .fair: "약간 높음"
-        case .serious: "높음"
-        case .critical: "매우 높음"
-        @unknown default: "알 수 없음"
+        case .nominal: String(localized: "정상")
+        case .fair: String(localized: "약간 높음")
+        case .serious: String(localized: "높음")
+        case .critical: String(localized: "매우 높음")
+        @unknown default: String(localized: "알 수 없음")
         }
     }
 }

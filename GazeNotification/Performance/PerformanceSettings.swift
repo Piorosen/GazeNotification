@@ -8,21 +8,21 @@ enum PerformanceProfile: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .automatic: "자동"
-        case .performance: "성능 우선"
-        case .balanced: "균형"
-        case .saver: "절전"
-        case .custom: "사용자 지정"
+        case .automatic: String(localized: "자동")
+        case .performance: String(localized: "성능 우선")
+        case .balanced: String(localized: "균형")
+        case .saver: String(localized: "절전")
+        case .custom: String(localized: "사용자 지정")
         }
     }
 
     var summary: String {
         switch self {
-        case .automatic: "전원 연결 → 균형, 배터리·저전력 모드·발열 → 절전"
-        case .performance: "빠르게 따라가지만 전력을 가장 많이 씀"
-        case .balanced: "평소 사용에 맞춘 기본값"
-        case .saver: "배터리용. 시선이 바뀐 뒤 반영이 조금 늦음"
-        case .custom: "아래 값을 직접 정함"
+        case .automatic: String(localized: "전원 연결 → 균형, 배터리·저전력 모드·발열 → 절전")
+        case .performance: String(localized: "빠르게 따라가지만 전력을 가장 많이 씀")
+        case .balanced: String(localized: "평소 사용에 맞춘 기본값")
+        case .saver: String(localized: "배터리용. 시선이 바뀐 뒤 반영이 조금 늦음")
+        case .custom: String(localized: "아래 값을 직접 정함")
         }
     }
 
@@ -124,14 +124,14 @@ struct EffectivePolicy: Equatable {
     }
 
     private static func automaticChoice(for power: PowerState) -> (PerformanceProfile, String) {
-        if power.lowPowerMode { return (.saver, "저전력 모드") }
+        if power.lowPowerMode { return (.saver, String(localized: "저전력 모드")) }
         switch power.thermal {
-        case .serious, .critical: return (.saver, "발열이 높음")
+        case .serious, .critical: return (.saver, String(localized: "발열이 높음"))
         default: break
         }
         if power.onBattery {
-            return (.saver, power.batteryLevel.map { "배터리 사용 중 (\($0)%)" } ?? "배터리 사용 중")
+            return (.saver, power.batteryLevel.map { String(localized: "배터리 사용 중 (\($0)%)") } ?? String(localized: "배터리 사용 중"))
         }
-        return (.balanced, "전원 연결됨")
+        return (.balanced, String(localized: "전원 연결됨"))
     }
 }

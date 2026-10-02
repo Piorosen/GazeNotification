@@ -7,7 +7,7 @@ import Foundation
 /// 동공은 남은 눈 움직임. 오른쪽을 볼수록 코·동공·yaw 값은 작아진다 (`FaceFeatures` 의 부호 규칙).
 /// 여러 스레드에서 쓰므로 바뀌는 값은 잠금으로 보호한다.
 final class SimulatedFaceSource: @unchecked Sendable {
-    static let deviceName = "가상 카메라 (UI 테스트)"
+    static let deviceName = String(localized: "가상 카메라 (UI 테스트)")
     /// C922 와 같은 지원 fps
     static let supportedFPS: [Double] = [5, 7.5, 10, 15, 20, 24, 30]
 

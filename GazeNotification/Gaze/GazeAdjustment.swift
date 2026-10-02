@@ -81,8 +81,8 @@ struct GazeAdjustment: Codable, Equatable {
 
         var message: String {
             switch self {
-            case .noSpread: "왼쪽·가운데·오른쪽을 볼 때 추정값 차이가 너무 작습니다. 전체 시선 보정을 먼저 하세요."
-            case .outOfRange: "추정 위치가 너무 많이 벗어나 있습니다. 전체 시선 보정을 먼저 하세요."
+            case .noSpread: String(localized: "왼쪽·가운데·오른쪽을 볼 때 추정값 차이가 너무 작습니다. 전체 시선 보정을 먼저 하세요.")
+            case .outOfRange: String(localized: "추정 위치가 너무 많이 벗어나 있습니다. 전체 시선 보정을 먼저 하세요.")
             }
         }
     }

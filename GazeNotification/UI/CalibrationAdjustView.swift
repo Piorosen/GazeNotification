@@ -37,11 +37,12 @@ struct CalibrationAdjustView: View {
     private var calibrationSection: some View {
         Section {
             if let calibration = model.calibration, let estimator = model.activeEstimator {
-                Text(String(format: "%@ · %@ · 학습 오차 %.1f%%%@ · 샘플 %d개 · ", model.analysisMode.shortTitle,
-                            estimator.kind.title, estimator.trainingRMSE * 100,
-                            estimator.crossValidationRMSE.map { String(format: " · 교차검증 %.1f%%", $0 * 100) } ?? "",
-                            estimator.regression.sampleCount)
-                     + calibration.createdAt.formatted(date: .abbreviated, time: .shortened))
+                let date = calibration.createdAt.formatted(date: .abbreviated, time: .shortened)
+                let training = percentText(estimator.trainingRMSE)
+                let samples = estimator.regression.sampleCount
+                Text(estimator.crossValidationRMSE.map {
+                    String(localized: "\(model.analysisMode.shortTitle) · \(estimator.kind.title) · 학습 오차 \(training) · 교차검증 \(percentText($0)) · 샘플 \(samples)개 · \(date)")
+                } ?? String(localized: "\(model.analysisMode.shortTitle) · \(estimator.kind.title) · 학습 오차 \(training) · 샘플 \(samples)개 · \(date)"))
                     .accessibilityIdentifier("adjust.summary")
                 let results = estimator.targetResults
                 if !results.isEmpty {
@@ -77,12 +78,11 @@ struct CalibrationAdjustView: View {
             }
             .accessibilityIdentifier("adjust.points")
             LimitSlider(id: "adjust.seconds", title: "점 하나를 보는 시간", value: $model.calibrationSeconds, range: 0.8...4, step: 0.2,
-                        text: String(format: "%.1f초", model.calibrationSeconds))
+                        text: String(localized: "\(fixed(model.calibrationSeconds))초"))
         } header: {
             Text("학습한 보정")
         } footer: {
-            FormNote("빠른 위치 맞춤은 학습한 보정은 그대로 두고 왼쪽 끝·가운데·오른쪽 끝을 볼 때의 값으로 아래 \"위치\"만 다시 계산합니다. "
-                 + "전체 보정을 새로 하면 위치 조정은 초기화됩니다.")
+            FormNote("빠른 위치 맞춤은 학습한 보정은 그대로 두고 왼쪽 끝·가운데·오른쪽 끝을 볼 때의 값으로 아래 \"위치\"만 다시 계산합니다. 전체 보정을 새로 하면 위치 조정은 초기화됩니다.")
         }
     }
 
@@ -91,12 +91,11 @@ struct CalibrationAdjustView: View {
     private var positionSection: some View {
         Section {
             LimitSlider(id: "adjust.offset", title: "좌우 이동", value: $model.adjustment.offset, range: GazeAdjustment.offsetRange, step: 0.005,
-                        text: String(format: "%+.1f%% (%@)", model.adjustment.offset * 100,
-                                     model.adjustment.offset == 0 ? "그대로" : (model.adjustment.offset > 0 ? "오른쪽으로" : "왼쪽으로")))
+                        text: offsetText)
             LimitSlider(id: "adjust.leftGain", title: "왼쪽 범위", value: $model.adjustment.leftGain, range: GazeAdjustment.gainRange, step: 0.05,
-                        text: String(format: "×%.2f", model.adjustment.leftGain))
+                        text: "×" + fixed(model.adjustment.leftGain, 2))
             LimitSlider(id: "adjust.rightGain", title: "오른쪽 범위", value: $model.adjustment.rightGain, range: GazeAdjustment.gainRange, step: 0.05,
-                        text: String(format: "×%.2f", model.adjustment.rightGain))
+                        text: "×" + fixed(model.adjustment.rightGain, 2))
             HStack {
                 Spacer()
                 Button("위치 초기화") { model.adjustment = model.adjustment.resettingPosition() }
@@ -126,16 +125,15 @@ struct CalibrationAdjustView: View {
         } header: {
             Text("특징 가중치")
         } footer: {
-            FormNote("각 특징이 위치에 기여하는 정도를 배율로 조절합니다 (100% = 학습한 그대로, 0% = 사용 안 함). "
-                 + "예: 눈동자 검출이 불안정하면 \"동공 위치\"를 낮추세요. 오른쪽 숫자는 지금 프레임의 기여량.")
+            FormNote("각 특징이 위치에 기여하는 정도를 배율로 조절합니다 (100% = 학습한 그대로, 0% = 사용 안 함). 예: 눈동자 검출이 불안정하면 \"동공 위치\"를 낮추세요. 오른쪽 숫자는 지금 프레임의 기여량.")
         }
     }
 
     private func featureText(_ gain: Double, term: GazeBreakdown.Term?) -> String {
-        let base = String(format: "%.0f%%", gain * 100)
+        let base = fixed(gain * 100, 0) + "%"
         guard let term else { return base }
-        guard term.slope != nil else { return base + " · 모델 미사용" }
-        return model.faceDetected ? base + String(format: " · %+.1f%%", term.contribution * 100) : base
+        guard term.slope != nil else { return String(localized: "\(base) · 모델 미사용") }
+        return model.faceDetected ? "\(base) · \(signed(term.contribution * 100))%" : base
     }
 
     // MARK: - 움직임
@@ -144,29 +142,41 @@ struct CalibrationAdjustView: View {
         Section {
             LimitSlider(id: "adjust.smoothing", title: "떨림 억제 (기본 반응 속도)", value: $model.adjustment.smoothing,
                         range: GazeAdjustment.smoothingRange, step: 0.05,
-                        text: String(format: "%.2fHz · %@", model.adjustment.smoothing,
-                                     model.adjustment.smoothing < 0.6 ? "부드럽게" : (model.adjustment.smoothing > 1.5 ? "빠르게" : "보통")))
+                        text: smoothingText)
             LimitSlider(id: "adjust.responsiveness", title: "큰 시선 이동에 반응", value: $model.adjustment.responsiveness,
                         range: GazeAdjustment.responsivenessRange, step: 0.1,
-                        text: String(format: "%.1f", model.adjustment.responsiveness))
+                        text: fixed(model.adjustment.responsiveness))
             Picker("구역 나누기", selection: $model.adjustment.zones) {
                 ForEach(GazeAdjustment.zoneChoices, id: \.self) { zones in
-                    Text(zones == 0 ? "끔" : "\(zones)구역").tag(zones)
+                    Text(zones == 0 ? String(localized: "끔") : String(localized: "\(zones)구역")).tag(zones)
                 }
             }
             .accessibilityIdentifier("adjust.zones")
             LimitSlider(id: "adjust.follow", title: "떠 있는 알림이 따라오는 최소 이동", value: $model.adjustment.followThreshold,
                         range: GazeAdjustment.followRange, step: 0.01,
-                        text: String(format: "화면 폭의 %.0f%%", model.adjustment.followThreshold * 100))
+                        text: String(localized: "화면 폭의 \(fixed(model.adjustment.followThreshold * 100, 0))%"))
         } header: {
-            Text("움직임")
+            Text("움직임 반응")
         } footer: {
-            FormNote("떨림 억제를 낮추면 위치가 안정되지만 늦게 따라옵니다. 구역 나누기를 켜면 화면을 N칸으로 나눠 알림을 칸 가운데에 띄웁니다 "
-                 + "(경계 근처에서 왔다 갔다 하지 않도록 칸 폭의 20%를 더 넘어야 옮김).")
+            FormNote("떨림 억제를 낮추면 위치가 안정되지만 늦게 따라옵니다. 구역 나누기를 켜면 화면을 N칸으로 나눠 알림을 칸 가운데에 띄웁니다 (경계 근처에서 왔다 갔다 하지 않도록 칸 폭의 20%를 더 넘어야 옮김).")
         }
     }
 
-    private func percent(_ value: Double) -> String { String(format: "%.0f%%", value * 100) }
+    private func percent(_ value: Double) -> String { fixed(value * 100, 0) + "%" }
+
+    private var offsetText: String {
+        let offset = model.adjustment.offset
+        let value = signed(offset * 100) + "%"
+        if offset == 0 { return String(localized: "\(value) (그대로)") }
+        return offset > 0 ? String(localized: "\(value) (오른쪽으로)") : String(localized: "\(value) (왼쪽으로)")
+    }
+
+    private var smoothingText: String {
+        let hz = fixed(model.adjustment.smoothing, 2) + "Hz"
+        let smoothing = model.adjustment.smoothing
+        if smoothing < 0.6 { return String(localized: "\(hz) · 부드럽게") }
+        return smoothing > 1.5 ? String(localized: "\(hz) · 빠르게") : String(localized: "\(hz) · 보통")
+    }
 }
 
 /// 화면 비율 그대로의 막대: 모델 출력(조정 전)과 최종 위치(조정·스무딩 후), 알림이 뜰 자리를 보여 준다.
@@ -227,13 +237,13 @@ private struct AdjustPreview: View {
                 HStack(spacing: 5) {
                     Circle().strokeBorder(Color.secondary, lineWidth: 2).frame(width: 10, height: 10)
                     Text("모델 출력 (조정 전)").foregroundStyle(.secondary)
-                    Text(raw.map { String(format: "%.0f%%", $0 * 100) } ?? "—").monospacedDigit()
+                    Text(raw.map { fixed($0 * 100, 0) + "%" } ?? "—").monospacedDigit()
                         .accessibilityIdentifier("adjust.raw")
                 }
                 HStack(spacing: 5) {
                     Circle().fill(Color.accentColor).frame(width: 10, height: 10)
                     Text("최종 위치 · 알림 자리(막대)").foregroundStyle(.secondary)
-                    Text(final.map { String(format: "%.0f%%", $0 * 100) } ?? "—").monospacedDigit()
+                    Text(final.map { fixed($0 * 100, 0) + "%" } ?? "—").monospacedDigit()
                         .accessibilityIdentifier("adjust.final")
                 }
             }

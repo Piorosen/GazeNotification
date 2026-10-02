@@ -74,7 +74,7 @@ final class FaceFeatureExtractor {
 
     /// 요청의 각 단계에 선호 장치를 지정하고 결과를 "ANE" 처럼 돌려준다 (단계가 여럿이면 "ANE/CPU")
     private static func assign(_ request: VNRequest, _ preference: ComputePreference) -> String {
-        guard let stages = try? request.supportedComputeStageDevices else { return "기본" }
+        guard let stages = try? request.supportedComputeStageDevices else { return String(localized: "기본") }
         var chosen: [String] = []
         for (stage, available) in stages.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
             guard let device = preference.pick(from: available) else { continue }
@@ -85,7 +85,7 @@ final class FaceFeatureExtractor {
             default: chosen.append("CPU")
             }
         }
-        return chosen.isEmpty ? "기본" : chosen.joined(separator: "/")
+        return chosen.isEmpty ? String(localized: "기본") : chosen.joined(separator: "/")
     }
 
     /// 눈 높이/폭 비율이 이보다 작으면 감은 것으로 보고 동공 값을 버린다.
@@ -288,9 +288,9 @@ final class FaceFeatureExtractor {
 /// 요청별로 실제 지정된 장치
 struct VisionDevices: Equatable, Sendable {
     var preference: ComputePreference = .automatic
-    var detection = "기본"
-    var landmarks76 = "기본"
-    var landmarks65 = "기본"
+    var detection = String(localized: "기본")
+    var landmarks76 = String(localized: "기본")
+    var landmarks65 = String(localized: "기본")
 
     func landmarks(for mode: AnalysisMode) -> String? {
         switch mode {

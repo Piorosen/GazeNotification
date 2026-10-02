@@ -208,7 +208,7 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             do {
                 let input = try AVCaptureDeviceInput(device: device)
                 guard session.canAddInput(input) else {
-                    report(.failed("입력을 추가할 수 없음: \(device.localizedName)"))
+                    report(.failed(String(localized: "입력을 추가할 수 없음: \(device.localizedName)")))
                     return
                 }
                 session.addInput(input)

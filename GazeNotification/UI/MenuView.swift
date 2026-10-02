@@ -26,6 +26,8 @@ struct MenuView: View {
                     model.startCalibration()
                 } label: {
                     Label("시선 보정", systemImage: "scope")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityIdentifier("menu.calibrate")
@@ -37,6 +39,8 @@ struct MenuView: View {
                     model.sendTestNotification()
                 } label: {
                     Label("테스트 알림", systemImage: "bell.badge")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityIdentifier("menu.testNotification")
@@ -50,6 +54,8 @@ struct MenuView: View {
                     model.openSettings(.performance)
                 } label: {
                     Label("성능 그래프·연산 제한", systemImage: "chart.xyaxis.line")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityIdentifier("menu.openPerformance")
@@ -58,6 +64,8 @@ struct MenuView: View {
                     model.openSettings(.calibration)
                 } label: {
                     Label("보정 직접 조정", systemImage: "slider.horizontal.3")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityIdentifier("menu.openAdjust")
@@ -78,8 +86,7 @@ struct MenuView: View {
                     Text("AI 연산 상세").font(.callout.weight(.semibold))
                     Spacer()
                     if model.placementSource == .gaze {
-                        Text(String(format: "%.1f회/s · CPU %.1f%%",
-                                    model.pipeline.processedFPS, model.liveStats.processCPUPercent))
+                        Text("\(fixed(model.pipeline.processedFPS))회/s · CPU \(fixed(model.liveStats.processCPUPercent))%")
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -145,12 +152,12 @@ struct MenuView: View {
             StatusRow(id: "camera", title: "카메라", value: cameraText, color: cameraColor)
             if model.placementSource == .gaze {
                 StatusRow(id: "face", title: "얼굴",
-                          value: model.faceDetected ? String(format: "감지됨 · %.0f fps", model.fps) : "감지 안 됨",
+                          value: model.faceDetected ? String(localized: "감지됨 · \(fixed(model.fps, 0)) fps") : String(localized: "감지 안 됨"),
                           color: model.faceDetected ? .green : .orange)
                 StatusRow(id: "calibration", title: "보정", value: calibrationText, color: model.calibration == nil ? .orange : .green)
             }
             StatusRow(id: "accessibility", title: "손쉬운 사용",
-                      value: model.accessibilityGranted ? "허용됨" : "필요",
+                      value: model.accessibilityGranted ? String(localized: "허용됨") : String(localized: "필요"),
                       color: model.accessibilityGranted ? .green : .red)
             StatusRow(id: "policy", title: "연산", value: policyText, color: model.cameraPause == nil ? .green : .secondary)
             if model.placementSource == .gaze {
@@ -195,6 +202,19 @@ struct MenuView: View {
             if model.placementSource == .gaze {
                 Toggle("화면 상단에 알림 위치 표시", isOn: $model.showOverlay)
             }
+            Picker("언어", selection: $model.language) {
+                ForEach(AppLanguage.allCases) { Text(verbatim: $0.title).tag($0) }
+            }
+            .accessibilityIdentifier("menu.language")
+            if model.languageNeedsRestart {
+                HStack {
+                    Text("다시 시작하면 바뀝니다").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("지금 다시 시작") { AppLanguage.relaunch() }
+                        .accessibilityIdentifier("menu.relaunch")
+                }
+                .font(.caption)
+            }
             Toggle("로그인 시 자동 실행", isOn: Binding(
                 get: { model.launchAtLogin },
                 set: { model.setLaunchAtLogin($0) }
@@ -230,21 +250,23 @@ struct MenuView: View {
     private var policyText: String {
         let policy = model.policy
         var text = policy.applied.title
-        if let reason = policy.reason { text += " (자동 · \(reason))" }
-        if model.governorScale < 0.999 { text += String(format: " · CPU 상한으로 %.0f%%", model.governorScale * 100) }
+        if let reason = policy.reason { text = String(localized: "\(policy.applied.title) (자동 · \(reason))") }
+        if model.governorScale < 0.999 {
+            text = String(localized: "\(text) · CPU 상한으로 \(fixed(model.governorScale * 100, 0))%")
+        }
         return text
     }
 
     private var cameraText: String {
         if model.placementSource == .gaze, model.isEnabled, let pause = model.cameraPause {
-            return pause == .screen ? "꺼짐 (화면 꺼짐·잠김)" : "꺼짐 (오래 자리 비움 — 입력하면 켜짐)"
+            return pause == .screen ? String(localized: "꺼짐 (화면 꺼짐·잠김)") : String(localized: "꺼짐 (오래 자리 비움 — 입력하면 켜짐)")
         }
         switch model.cameraStatus {
-        case .idle: return model.placementSource == .gaze && model.isEnabled ? "시작 중…" : "꺼짐"
-        case .unauthorized: return "권한 없음 (시스템 설정 → 카메라)"
-        case .noDevice: return "카메라 없음"
+        case .idle: return model.placementSource == .gaze && model.isEnabled ? String(localized: "시작 중…") : String(localized: "꺼짐")
+        case .unauthorized: return String(localized: "권한 없음 (시스템 설정 → 카메라)")
+        case .noDevice: return String(localized: "카메라 없음")
         case .running(let name): return name
-        case .failed(let message): return "오류: \(message)"
+        case .failed(let message): return String(localized: "오류: \(message)")
         }
     }
 
@@ -257,19 +279,20 @@ struct MenuView: View {
     }
 
     private var calibrationText: String {
-        guard let calibration = model.calibration else { return "안 함 (기본 추정식 사용 · 보정 권장)" }
+        guard let calibration = model.calibration else { return String(localized: "안 함 (기본 추정식 사용 · 보정 권장)") }
         let date = calibration.createdAt.formatted(date: .abbreviated, time: .shortened)
         guard let estimator = model.activeEstimator else {
-            return "\(model.analysisMode.shortTitle) 방식은 학습 안 됨 (다시 보정) · " + date
+            return String(localized: "\(model.analysisMode.shortTitle) 방식은 학습 안 됨 (다시 보정) · \(date)")
         }
-        return String(format: "완료 · 오차 %.1f%% · ", (estimator.crossValidationRMSE ?? estimator.trainingRMSE) * 100) + date
+        let error = percentText(estimator.crossValidationRMSE ?? estimator.trainingRMSE)
+        return String(localized: "완료 · 오차 \(error) · \(date)")
     }
 }
 
 private struct StatusRow: View {
     /// 값 글자의 접근성 식별자 "status.<id>" (UI 테스트)
     let id: String
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let color: Color
 
@@ -278,7 +301,9 @@ private struct StatusRow: View {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(title)
                 .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(width: 104, alignment: .leading)
             Text(value)
                 .lineLimit(1)
                 .truncationMode(.middle)

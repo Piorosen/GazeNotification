@@ -18,8 +18,7 @@ struct AIModeView: View {
                     Spacer()
                 }
             } footer: {
-                FormNote("보정 한 번으로 세 가지 분석 방식 × 세 가지 모델을 모두 학습하므로, 이후에는 보정 없이 바꿔 가며 비교할 수 있습니다. "
-                         + "교차검증 오차는 보정 점을 하나씩 빼고 학습해 그 점을 맞혀 본 값이라, 처음 보는 위치를 얼마나 잘 맞힐지에 더 가깝습니다.")
+                FormNote("보정 한 번으로 세 가지 분석 방식 × 세 가지 모델을 모두 학습하므로, 이후에는 보정 없이 바꿔 가며 비교할 수 있습니다. 교차검증 오차는 보정 점을 하나씩 빼고 학습해 그 점을 맞혀 본 값이라, 처음 보는 위치를 얼마나 잘 맞힐지에 더 가깝습니다.")
             }
         }
         .formStyle(.grouped)
@@ -40,24 +39,23 @@ struct AIModeView: View {
         } header: {
             Text("얼굴 분석 방식")
         } footer: {
-            FormNote("오른쪽 값은 이 Mac 에서 지금 연산 장치로 실제로 잰 처리 1회당 CPU(검출 간격 포함 평균)와, 마지막 보정에서 가장 좋았던 모델의 교차검증 오차입니다. "
-                     + "측정값은 그 방식을 잠시 써 봐야 생깁니다.")
+            FormNote("오른쪽 값은 이 Mac 에서 지금 연산 장치로 실제로 잰 처리 1회당 CPU(검출 간격 포함 평균)와, 마지막 보정에서 가장 좋았던 모델의 교차검증 오차입니다. 측정값은 그 방식을 잠시 써 봐야 생깁니다.")
         }
     }
 
     private func modeSummary(_ mode: AnalysisMode) -> [String] {
         var lines: [String] = []
         if let cost = model.modeCosts[ModeCostKey(mode: mode, device: model.computePreference)] {
-            lines.append(String(format: "처리 1회 CPU %.1fms", cost.cpuMs))
+            lines.append(String(localized: "처리 1회 CPU \(fixed(cost.cpuMs))ms"))
         } else {
-            lines.append("CPU 측정 전")
+            lines.append(String(localized: "CPU 측정 전"))
         }
         if let calibration = model.calibration, let kind = calibration.bestKind(for: mode),
            let estimator = calibration.estimator(mode, kind) {
             let error = estimator.crossValidationRMSE ?? estimator.trainingRMSE
-            lines.append(String(format: "오차 %.1f%% (%@)", error * 100, kind.title))
+            lines.append(String(localized: "오차 \(percentText(error)) (\(kind.title))"))
         } else {
-            lines.append("보정 안 됨")
+            lines.append(String(localized: "보정 안 됨"))
         }
         return lines
     }
@@ -77,10 +75,10 @@ struct AIModeView: View {
                 .accessibilityIdentifier("ai.devices")
             let costs = ComputePreference.allCases.compactMap { device -> String? in
                 model.modeCosts[ModeCostKey(mode: model.analysisMode, device: device)]
-                    .map { String(format: "%@ %.1fms", device == .automatic ? "자동" : device.title, $0.cpuMs) }
+                    .map { "\(device == .automatic ? String(localized: "자동") : device.title) \(fixed($0.cpuMs))ms" }
             }
             if !costs.isEmpty {
-                Text("\(model.analysisMode.shortTitle) 방식 처리 1회 CPU: " + costs.joined(separator: " · "))
+                Text("\(model.analysisMode.shortTitle) 방식 처리 1회 CPU: \(costs.joined(separator: " · "))")
                     .font(.callout).monospacedDigit()
             }
         } header: {
@@ -153,10 +151,10 @@ struct AIModeView: View {
 
     private func statusText(_ kind: EstimatorKind) -> String {
         var parts: [String] = []
-        if kind == model.activeEstimatorKind { parts.append("사용 중") }
-        if kind != .formula, model.calibration?.bestKind(for: model.analysisMode) == kind { parts.append("자동 선택") }
+        if kind == model.activeEstimatorKind { parts.append(String(localized: "사용 중")) }
+        if kind != .formula, model.calibration?.bestKind(for: model.analysisMode) == kind { parts.append(String(localized: "자동 선택")) }
         if kind != .formula, model.calibration?.estimator(model.analysisMode, kind) == nil {
-            parts.append(model.calibration == nil ? "보정 필요" : "학습 안 됨")
+            parts.append(model.calibration == nil ? String(localized: "보정 필요") : String(localized: "학습 안 됨"))
         }
         return parts.joined(separator: " · ")
     }

@@ -20,6 +20,11 @@ enum AppEnvironment {
         return suite
     }()
 
+    /// `defaults` 의 저장 영역 이름 (앱 전용 언어 설정을 읽을 때)
+    static var defaultsDomain: String {
+        isUITesting ? uiTestingSuiteName : (Bundle.main.bundleIdentifier ?? "party.udon.GazeNotification")
+    }
+
     /// 실제 기기(카메라·NotificationCenter·권한)를 건드려도 되는지
     static var usesRealDevices: Bool { !isUITesting && !isUnitTesting }
 }
