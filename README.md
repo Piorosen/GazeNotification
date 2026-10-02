@@ -122,6 +122,9 @@ scripts/debug.sh snapshot # 메뉴 패널을 그려 ~/Library/Logs/GazeNotificat
 scripts/debug.sh settings-performance   # 설정 창 탭을 그려 settings-<탭>.png 로 저장 (limits, ai, calibration)
 scripts/debug.sh mode-light             # AI 모드 분석 방식 바꾸기 (precise, light, headPose)
 scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automatic, neuralEngine, gpu, cpu)
+scripts/debug.sh profile-balanced       # 성능 프로필 바꾸기 (automatic, performance, balanced, saver, custom)
+scripts/debug.sh snapshot-calibration   # 보정 화면을 32:9 로 그려 calibration-screen.png 로 저장 (배경 투명)
+scripts/debug.sh history                # 성능 기록(최근 10분)을 performance-history.json 으로 내보내기
 ```
 
 ## 배포
@@ -165,7 +168,9 @@ Apple Developer Program(유료)에 가입한 뒤 저장소 **Settings → Secret
 
 - 한국어·English·日本語·简体中文 (`site/i18n.js`, 브라우저 언어로 고르고 `?lang=ja` 로 지정 가능).
 - 최신 릴리스의 버전·크기는 GitHub API 로 읽어 다운로드 버튼 밑에 보여 준다.
-- 스크린샷(`site/assets/screens/<언어>/`)은 `scripts/debug.sh snapshot`, `settings-performance` 로 언어별로 찍은 것.
+- "화면 살펴보기"의 앱 화면(`site/assets/tour/<언어>/*.webp`)은 실제 앱을 언어별로 띄워 화면 밖에 그린 뒤 기능별로 자른 것이고,
+  성능 그래프는 앱에서 내보낸 실제 기록(`site/assets/performance-history.json`, 1초 간격 10분)을 `site/perf.js` 가 그린다.
+  다시 만들기: `scripts/site-screenshots.sh` (기록까지: `scripts/site-screenshots.sh history`, 약 13분).
 - 로컬에서 보기: `python3 -m http.server -d site 8000`
 
 CI(`ci.yml`)는 `main` 푸시와 PR 마다 단위 테스트와 언어팩 점검을 돌린다. UI 테스트는 화면을 직접 조작하므로 CI 에서 돌리지 않는다.

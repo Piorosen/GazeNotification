@@ -185,7 +185,7 @@ private final class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
-private struct CalibrationView: View {
+struct CalibrationView: View {
     let state: CalibrationState
 
     var body: some View {

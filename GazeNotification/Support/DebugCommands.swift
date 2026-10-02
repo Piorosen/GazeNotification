@@ -24,6 +24,8 @@ enum DebugCommands {
             ("dump", { $0.dumpAccessibilityTree(reveal: false) }),
             ("status", { $0.logStatus() }),
             ("snapshot", { snapshotMenu(model: $0) }),
+            ("snapshot-calibration", { _ in snapshotCalibration() }),
+            ("history", { exportHistory(model: $0) }),
         ]
         handlers += SettingsTab.allCases.map { tab -> Handler in
             ("settings-\(tab.rawValue)", { snapshotSettings(model: $0, tab: tab) })
@@ -31,6 +33,9 @@ enum DebugCommands {
         handlers += AnalysisMode.allCases.map { mode -> Handler in ("mode-\(mode.rawValue)", { $0.analysisMode = mode }) }
         handlers += ComputePreference.allCases.map { device -> Handler in
             ("device-\(device.rawValue)", { $0.computePreference = device })
+        }
+        handlers += PerformanceProfile.allCases.map { profile -> Handler in
+            ("profile-\(profile.rawValue)", { $0.profile = profile })
         }
         let center = DistributedNotificationCenter.default()
         for (name, handler) in handlers {
@@ -46,10 +51,10 @@ enum DebugCommands {
 }
 
 extension DebugCommands {
-    /// 화면 배율과 관계없이 2배 해상도로 그릴 비트맵 (홈페이지 스크린샷용)
-    static func retinaRep(for view: NSView) -> NSBitmapImageRep? {
+    /// 화면 배율과 관계없이 `scale` 배 해상도로 그릴 비트맵 (홈페이지 스크린샷용)
+    static func retinaRep(for view: NSView, scale: CGFloat = 2) -> NSBitmapImageRep? {
         let size = view.bounds.size
-        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
         rep.size = size
@@ -77,10 +82,48 @@ extension DebugCommands {
         }
     }
 
+    /// 보정 화면(두 번째 점을 보는 중)을 32:9 크기로 그려 calibration-screen.png 로 저장 (홈페이지용)
+    static func snapshotCalibration() {
+        let plan = CalibrationPlan(title: String(localized: "보정"), intro: "", targets: CalibrationPlan.evenTargets(5),
+                                   collectDuration: .seconds(1)) { _ in .failure(CalibrationFailure(message: "")) }
+        let state = CalibrationState(plan: plan)
+        state.phase = .collecting
+        state.targetIndex = 1
+        state.targetX = plan.targets[1]
+        state.progress = 0.62
+        state.faceDetected = true
+        render(AnyView(CalibrationView(state: state)), name: "calibration-screen.png", width: 2560, height: 720,
+               delay: 0.5, scale: 1, transparent: true) {}
+    }
+
+    /// 성능 기록(최근 10분, 1초 간격)을 performance-history.json 으로 내보낸다 (홈페이지 그래프용)
+    static func exportHistory(model: AppModel) {
+        let history = model.recordedHistory
+        guard let first = history.first else { return }
+        func round2(_ value: Double) -> Double { (value * 100).rounded() / 100 }
+        let rows: [[Any]] = history.map { s in
+            [round2(s.time.timeIntervalSince(first.time)), round2(s.processCPU), round2(s.trackingCPU), round2(s.mainCPU),
+             round2(s.processedHz), round2(s.detectHz), round2(s.receivedFPS), round2(s.targetHz),
+             round2(s.detectMs), round2(s.landmarksMs), String(describing: s.rate), s.profile.rawValue, round2(s.governorScale)]
+        }
+        let json: [String: Any] = [
+            "start": ISO8601DateFormatter().string(from: first.time),
+            "columns": ["t", "processCPU", "trackingCPU", "mainCPU", "processedHz", "detectHz", "receivedFPS", "targetHz",
+                        "detectMs", "landmarksMs", "rate", "profile", "governorScale"],
+            "samples": rows,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: json) else { return }
+        let url = Log.directory.appendingPathComponent("performance-history.json")
+        try? data.write(to: url)
+        Log.info("성능 기록 저장: \(url.path) (\(rows.count)개)")
+    }
+
     private static func render(_ content: AnyView, name: String, width: CGFloat, height: CGFloat,
-                               delay: TimeInterval, completion: @escaping @MainActor () -> Void) {
+                               delay: TimeInterval, scale: CGFloat = 2, transparent: Bool = false,
+                               completion: @escaping @MainActor () -> Void) {
+        // transparent: 배경 없이 그린다 (보정 화면처럼 반투명한 화면을 홈페이지에서 배경 위에 겹칠 때)
         let hosting = NSHostingView(rootView: content.frame(width: width, height: height)
-            .background(Color(nsColor: .windowBackgroundColor)))
+            .background(transparent ? Color.clear : Color(nsColor: .windowBackgroundColor)))
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: width, height: height),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -89,7 +132,7 @@ extension DebugCommands {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {
                 hosting.layoutSubtreeIfNeeded()
-                if let rep = retinaRep(for: hosting) {
+                if let rep = retinaRep(for: hosting, scale: scale) {
                     hosting.cacheDisplay(in: hosting.bounds, to: rep)
                     if let data = rep.representation(using: .png, properties: [:]) {
                         let url = Log.directory.appendingPathComponent(name)

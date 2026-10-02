@@ -351,6 +351,8 @@ final class AppModel {
     @ObservationIgnored private var latestPipelineTime: TimeInterval = 0
     @ObservationIgnored private var latestLiveStats = LiveStats()
     @ObservationIgnored private var historyBuffer = PerformanceHistory()
+    /// 설정 창이 닫혀 있어도 쌓이는 전체 기록 (`history` 는 창이 보일 때만 갱신된다)
+    var recordedHistory: [PerformanceSample] { historyBuffer.samples }
     @ObservationIgnored private var sampler: Timer?
     @ObservationIgnored private var previousSample: CPUSample?
     @ObservationIgnored private let mainThreadPort = CPUClock.currentThreadPort()
