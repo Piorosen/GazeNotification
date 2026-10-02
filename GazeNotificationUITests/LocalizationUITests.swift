@@ -7,8 +7,8 @@ final class LocalizationUITests: GazeUITestCase {
         XCTAssertFalse(app.buttons["menu.relaunch"].exists, "처음에는 다시 시작할 필요 없음")
         choose("English", in: "menu.language")
         XCTAssertTrue(app.buttons["menu.relaunch"].waitForExistence(timeout: 5), "언어를 바꾸면 다시 시작 버튼")
-        XCTAssertTrue(staticText(value: "다시 시작하면 바뀝니다").exists, "다시 시작 전에는 화면이 그대로")
-        choose("시스템 설정 따름", in: "menu.language")
+        XCTAssertTrue(staticText(value: "앱을 다시 시작하면 적용됩니다.").exists, "다시 시작 전에는 화면이 그대로")
+        choose("시스템 언어", in: "menu.language")
         waitUntil("원래대로 되돌리면 다시 시작 버튼이 사라짐") { !self.app.buttons["menu.relaunch"].exists }
     }
 
@@ -16,7 +16,7 @@ final class LocalizationUITests: GazeUITestCase {
     private static let packs: [(String, String, String, [String])] = [
         ("en", "Virtual camera (UI testing)", "Calibrate Gaze", ["Performance", "Compute Limits", "AI Mode", "Calibration Tuning"]),
         ("ja", "仮想カメラ（UIテスト）", "視線キャリブレーション", ["パフォーマンス", "処理制限", "AIモード", "キャリブレーション調整"]),
-        ("zh-Hans", "虚拟摄像头（UI 测试）", "视线校准", ["性能图表", "运算限制", "AI 模式", "校准调整"]),
+        ("zh-Hans", "虚拟摄像头（UI 测试）", "视线校准", ["性能", "运算限制", "AI 模式", "校准调整"]),
     ]
 
     private func checkPack(_ language: String) {

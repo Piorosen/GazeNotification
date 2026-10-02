@@ -14,7 +14,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// 언어 이름은 그 언어로 쓴다 (다른 언어 화면에서도 찾을 수 있게). "시스템 설정 따름"만 번역한다.
     var title: String {
         switch self {
-        case .system: String(localized: "시스템 설정 따름")
+        case .system: String(localized: "시스템 언어")
         case .korean: "한국어"
         case .english: "English"
         case .japanese: "日本語"

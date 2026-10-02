@@ -36,7 +36,6 @@ enum DefaultGazeModel {
             return .init(feature: feature, value: value, slope: slope, gain: g, contribution: contribution)
         }
         return GazeBreakdown(modelName: String(localized: "기본 추정식 (보정 전)"),
-                             formula: String(localized: "x = 0.5 + Σ 기울기 × (값 − 기준)"),
                              intercept: 0.5, terms: rows, raw: predict(vector, mode: mode, gains: gains))
     }
 }
@@ -57,17 +56,17 @@ enum GazeFeature: Int, CaseIterable, Identifiable {
         case .nose: String(localized: "코 방향")
         case .pupil: String(localized: "동공 위치")
         case .faceX: String(localized: "얼굴 위치")
-        case .yaw: String(localized: "머리 yaw")
+        case .yaw: String(localized: "머리 회전")
         }
     }
 
     /// 어떻게 재는지
     var detail: String {
         switch self {
-        case .nose: String(localized: "(코끝 − 두 눈 중점) ÷ 눈 사이 거리")
-        case .pupil: String(localized: "(동공 − 눈 중심) ÷ 눈 폭, 양눈 평균")
-        case .faceX: String(localized: "얼굴 상자 중심 x (카메라 화면 0~1)")
-        case .yaw: String(localized: "Vision 얼굴 검출이 추정한 좌우 회전각")
+        case .nose: String(localized: "두 눈 사이 중점에 대한 코끝의 위치")
+        case .pupil: String(localized: "눈 안에서 동공의 위치 (양쪽 눈 평균)")
+        case .faceX: String(localized: "카메라 화면에서 얼굴의 가로 위치")
+        case .yaw: String(localized: "얼굴 검출로 추정한 머리의 좌우 회전 각도")
         }
     }
 
@@ -96,7 +95,7 @@ struct GazeBreakdown: Equatable {
         var id: Int { feature.rawValue }
 
         var slopeText: String {
-            guard let slope else { return String(localized: "미사용") }
+            guard let slope else { return String(localized: "사용 안 함") }
             // yaw 는 1° 당 기울기로 표시
             let perUnit = slope / feature.displayScale
             return feature == .yaw ? String(format: "×%+.4f/°", perUnit) : String(format: "×%+.2f", perUnit)
@@ -104,7 +103,6 @@ struct GazeBreakdown: Equatable {
     }
 
     var modelName: String
-    let formula: String
     let intercept: Double
     let terms: [Term]
     /// 모델 출력 (필터 전)
@@ -197,10 +195,7 @@ struct GazeCalibration: Codable, Equatable {
             return .init(feature: feature, value: base[j], slope: slope, gain: g, contribution: contribution)
         }
         let name = expansion == nil ? String(localized: "선형 회귀") : String(localized: "곡선 회귀")
-        return GazeBreakdown(modelName: String(localized: "\(name) (ridge, 학습 오차 \(percentText(rmse)))"),
-                             formula: expansion == nil
-                                ? String(localized: "x = 평균 + Σ 기울기 × (값 − 보정 때 평균)")
-                                : String(localized: "x = 평균 + Σ 기울기 × (값 − 보정 때 평균) + 거듭제곱 항"),
+        return GazeBreakdown(modelName: String(localized: "\(name) (학습 오차 \(percentText(rmse)))"),
                              intercept: intercept, terms: rows, raw: predict(base, gains: gains))
     }
 

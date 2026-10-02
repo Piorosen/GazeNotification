@@ -24,9 +24,9 @@ final class CalibrationUITests: GazeUITestCase {
 
     func testFullCalibrationTrainsEveryModeAndModel() {
         useShortCalibration()
-        runCalibration(button: "adjust.recalibrate", title: "시선 보정")
+        runCalibration(button: "adjust.recalibrate", title: "보정")
 
-        waitForText("adjust.summary") { $0.contains("교차검증") && $0.contains("샘플") }
+        waitForText("adjust.summary") { $0.contains("교차 검증") && $0.contains("샘플") }
 
         // AI 모드 탭: 세 모델 모두 학습·교차검증 오차가 있고, 하나가 자동 선택됨
         selectTab("AI 모드")
@@ -53,7 +53,7 @@ final class CalibrationUITests: GazeUITestCase {
 
     func testQuickAdjustAfterCalibration() {
         useShortCalibration()
-        runCalibration(button: "adjust.recalibrate", title: "시선 보정")
+        runCalibration(button: "adjust.recalibrate", title: "보정")
         runCalibration(button: "adjust.quick", title: "빠른 위치 맞춤")
         openMenu()
         waitForText("menu.lastEvent") { $0.contains("빠른 위치 맞춤 완료") && $0.contains("좌우 이동") }

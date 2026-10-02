@@ -24,7 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .performance: String(localized: "성능 그래프")
+        case .performance: String(localized: "성능")
         case .limits: String(localized: "연산 제한")
         case .ai: String(localized: "AI 모드")
         case .calibration: String(localized: "보정 조정")
@@ -49,8 +49,8 @@ enum CameraPause: Equatable {
 
     var title: String {
         switch self {
-        case .screen: String(localized: "화면이 꺼져 있거나 잠겨 있어 카메라를 끔")
-        case .absence: String(localized: "오래 자리를 비워 카메라를 끔 — 키보드·마우스를 쓰면 다시 켬")
+        case .screen: String(localized: "화면이 꺼져 있거나 잠겨 있어 카메라를 일시 정지했습니다.")
+        case .absence: String(localized: "자리 비움 상태가 계속되어 카메라를 일시 정지했습니다. 키보드나 마우스를 사용하면 다시 시작합니다.")
         }
     }
 }
@@ -445,7 +445,7 @@ final class AppModel {
         mover.targetProvider = { [weak self] in self?.placementTarget() }
         mover.followWhileVisible = followWhileVisible
         mover.onMove = { [weak self] message in
-            self?.lastEvent = "\(Date().formatted(date: .omitted, time: .standard)) · \(message)"
+            self?.lastEvent = "\(Date().formatted(date: .omitted, time: .standard)) \(message)"
         }
         mover.onVisibilityChange = { [weak self] visible in
             guard let self else { return }
@@ -473,8 +473,8 @@ final class AppModel {
     func startCalibration() {
         let count = calibrationPointCount
         let plan = CalibrationPlan(
-            title: String(localized: "시선 보정"),
-            intro: String(localized: "화면 위쪽에 점 \(count)개가 왼쪽부터 차례로 나타납니다.\n평소 작업할 때처럼 자연스럽게 바라보세요. 고개를 돌려도 괜찮습니다."),
+            title: String(localized: "보정"),
+            intro: String(localized: "화면 위쪽에 점 \(count)개가 왼쪽부터 차례로 표시됩니다.\n평소 화면을 볼 때처럼 각 점을 바라보세요."),
             targets: CalibrationPlan.evenTargets(count),
             collectDuration: .milliseconds(Int(calibrationSeconds * 1000))
         ) { [weak self] samples in
@@ -493,10 +493,10 @@ final class AppModel {
             let mode = self.analysisMode
             let kind = self.estimatorChoice.kind.flatMap { set.estimator(mode, $0) != nil ? $0 : nil } ?? set.bestKind(for: mode)
             guard let kind, let model = set.estimator(mode, kind) else {
-                return .failure(CalibrationFailure(message: String(localized: "학습에 실패했습니다. 고개와 눈을 조금 더 움직여 점을 바라보세요.")))
+                return .failure(CalibrationFailure(message: String(localized: "보정에 실패했습니다. 점마다 고개와 눈을 점 쪽으로 돌려 다시 시도하세요.")))
             }
             let error = percentText(model.crossValidationRMSE ?? model.trainingRMSE)
-            let message = String(localized: "\(mode.shortTitle) · \(kind.title) · 평균 오차 약 \(error)")
+            let message = String(localized: "평균 오차 \(error)")
             return .success(CalibrationOutcome(message: message) { [weak self] in
                 self?.applyCalibration(set)
             })
@@ -512,7 +512,7 @@ final class AppModel {
         let mode = analysisMode
         let plan = CalibrationPlan(
             title: String(localized: "빠른 위치 맞춤"),
-            intro: String(localized: "점 3개(왼쪽 끝 · 가운데 · 오른쪽 끝)를 차례로 바라보세요.\n학습한 보정은 그대로 두고 좌우 이동과 범위만 다시 맞춥니다."),
+            intro: String(localized: "왼쪽 끝, 가운데, 오른쪽 끝에 표시되는 점을 차례로 바라보세요.\n기존 보정은 유지하고 위치와 범위만 다시 맞춥니다."),
             targets: targets,
             collectDuration: .milliseconds(1400)
         ) { [weak self] samples in
@@ -523,12 +523,12 @@ final class AppModel {
                 return raws.isEmpty ? nil : raws.reduce(0, +) / Double(raws.count)
             }
             guard let left = meanRaw(targets[0]), let center = meanRaw(targets[1]), let right = meanRaw(targets[2]) else {
-                return .failure(CalibrationFailure(message: String(localized: "얼굴이 충분히 감지되지 않았습니다.")))
+                return .failure(CalibrationFailure(message: String(localized: "얼굴을 충분히 인식하지 못했습니다.")))
             }
             Log.info(String(format: "빠른 위치 맞춤: 모델 출력 왼쪽 %.3f 가운데 %.3f 오른쪽 %.3f", left, center, right))
             switch GazeAdjustment.fit(left: (targets[0], left), center: (targets[1], center), right: (targets[2], right)) {
             case .success(let fit):
-                let message = String(localized: "좌우 이동 \(signed(fit.offset * 100))% · 왼쪽 범위 ×\(fixed(fit.leftGain, 2)) · 오른쪽 범위 ×\(fixed(fit.rightGain, 2))")
+                let message = String(localized: "좌우 이동 \(signed(fit.offset * 100))%, 왼쪽 범위 ×\(fixed(fit.leftGain, 2)), 오른쪽 범위 ×\(fixed(fit.rightGain, 2))")
                 return .success(CalibrationOutcome(message: message) {
                     guard let self else { return }
                     var adjusted = self.adjustment
@@ -559,7 +559,7 @@ final class AppModel {
             self.camera.setAnalysis(mode: self.analysisMode, computeAllModes: false)
             if let outcome {
                 outcome.apply()
-                self.lastEvent = String(localized: "\(plan.title) 완료 · \(outcome.message)")
+                self.lastEvent = String(localized: "\(plan.title) 완료 (\(outcome.message))")
             }
             self.filter.reset()
             self.zoneSnapper.reset()
@@ -581,12 +581,12 @@ final class AppModel {
         defaults.removeObject(forKey: Keys.calibration)
         defaults.removeObject(forKey: Keys.legacyCalibration)
         filter.reset()
-        lastEvent = String(localized: "보정 초기화 — 기본 추정식 사용")
+        lastEvent = String(localized: "보정을 초기화했습니다.")
     }
 
     func resetAdjustment() {
         adjustment = GazeAdjustment()
-        lastEvent = String(localized: "수동 보정값 초기화")
+        lastEvent = String(localized: "수동 조정값을 초기화했습니다.")
     }
 
     /// UI 에서 제한값을 바꾸면 지금 적용 중인 값에서 시작해 사용자 지정 프로필로 전환한다
@@ -606,7 +606,7 @@ final class AppModel {
     /// (osascript 알림은 Script Editor 알림이 꺼져 있으면 조용히 버려져서 직접 보낸다)
     func sendTestNotification(after delay: TimeInterval = 3) {
         guard AppEnvironment.usesRealDevices else {
-            lastEvent = String(localized: "테스트 알림 — 테스트 모드에서는 보내지 않음")
+            lastEvent = String(localized: "테스트 모드에서는 테스트 알림을 보내지 않습니다.")
             return
         }
         let center = UNUserNotificationCenter.current()
@@ -614,13 +614,13 @@ final class AppModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard granted else {
-                    self.lastEvent = String(localized: "알림 권한이 없습니다 — 시스템 설정 → 알림 → GazeNotification 허용")
+                    self.lastEvent = String(localized: "알림 권한이 없습니다. 시스템 설정 > 알림에서 GazeNotification을 허용하세요.")
                     Log.error("알림 권한 거부: \(error?.localizedDescription ?? "-")")
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = String(localized: "GazeNotification 테스트")
-                content.body = String(localized: "보고 있던 곳에 알림이 떴나요?")
+                content.title = String(localized: "테스트 알림")
+                content.body = String(localized: "GazeNotification에서 보낸 테스트 알림입니다.")
                 content.sound = .default
                 let trigger = delay > 0 ? UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false) : nil
                 let request = UNNotificationRequest(identifier: "gazenotification.test.\(UUID().uuidString)",
@@ -631,8 +631,8 @@ final class AppModel {
                     }
                 }
                 self.lastEvent = delay > 0
-                    ? String(localized: "\(Int(delay))초 뒤 테스트 알림 — 원하는 곳을 바라보세요")
-                    : String(localized: "테스트 알림 전송")
+                    ? String(localized: "\(Int(delay))초 후에 테스트 알림이 표시됩니다. 알림을 표시할 위치를 바라보세요.")
+                    : String(localized: "테스트 알림을 보냈습니다.")
             }
         }
     }
@@ -646,7 +646,7 @@ final class AppModel {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            lastEvent = String(localized: "로그인 항목 변경 실패: \(error.localizedDescription)")
+            lastEvent = String(localized: "로그인 항목을 변경할 수 없습니다: \(error.localizedDescription)")
             Log.error("SMAppService: \(error.localizedDescription)")
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -657,7 +657,7 @@ final class AppModel {
             Log.info("AX 트리 저장: \(url.path)")
             if reveal { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         } else {
-            lastEvent = String(localized: "AX 트리를 읽지 못했습니다 (손쉬운 사용 권한 확인)")
+            lastEvent = String(localized: "알림 창 구조를 읽을 수 없습니다. 손쉬운 사용 권한을 확인하세요.")
         }
     }
 
@@ -897,7 +897,7 @@ final class AppModel {
               now - lastFaceTime > minutes * 60 else { return }
         cameraPause = .absence
         Log.info("자리 비움 \(Int(minutes))분 — 카메라 끔 (입력이 생기면 다시 켬)")
-        lastEvent = String(localized: "오래 자리를 비워 카메라를 껐습니다 — 키보드·마우스를 쓰면 다시 켭니다")
+        lastEvent = CameraPause.absence.title
         applyRunState()
         updateTrackingRate(faceFound: false, now: now)
         startInputWatch()
@@ -1140,20 +1140,20 @@ enum TrackingRate: CaseIterable {
     var title: String {
         switch self {
         case .live: String(localized: "실시간")
-        case .normal: String(localized: "움직임")
-        case .still: String(localized: "머묾")
+        case .normal: String(localized: "활동 중")
+        case .still: String(localized: "시선 고정")
         case .away: String(localized: "자리 비움")
-        case .paused: String(localized: "카메라 꺼짐")
+        case .paused: String(localized: "일시 정지")
         }
     }
 
     var reason: String {
         switch self {
-        case .live: String(localized: "보정 중이거나 카메라 미리보기·보정 조정 화면을 보는 중")
-        case .normal: String(localized: "얼굴이 보이고 시선이 움직이는 중")
-        case .still: String(localized: "시선이 한곳에 머묾")
-        case .away: String(localized: "얼굴이 보이지 않음")
-        case .paused: String(localized: "화면이 꺼졌거나 오래 자리를 비움")
+        case .live: String(localized: "보정, 카메라 미리보기 또는 보정 조정 중")
+        case .normal: String(localized: "시선 이동 중")
+        case .still: String(localized: "시선이 한곳에 고정됨")
+        case .away: String(localized: "얼굴이 감지되지 않음")
+        case .paused: String(localized: "화면 꺼짐 또는 장시간 자리 비움")
         }
     }
 

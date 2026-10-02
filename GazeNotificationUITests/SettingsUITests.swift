@@ -43,16 +43,16 @@ final class SettingsUITests: GazeUITestCase {
         openSettings()
         selectTab("연산 제한")
         selectSegment("절전", in: "limits.profile")
-        waitForText("limits.activeHz.value") { $0 == "2.5회/s" }
-        XCTAssertEqual(text("limits.detectionInterval.value"), "6번에 1번")
+        waitForText("limits.activeHz.value") { $0 == "초당 2.5회" }
+        XCTAssertEqual(text("limits.detectionInterval.value"), "6프레임마다")
         XCTAssertEqual(text("limits.cpuLimit.value"), "5%")
         selectSegment("성능 우선", in: "limits.profile")
-        waitForText("limits.activeHz.value") { $0 == "10.0회/s" }
-        XCTAssertEqual(text("limits.detectionInterval.value"), "매번")
+        waitForText("limits.activeHz.value") { $0 == "초당 10.0회" }
+        XCTAssertEqual(text("limits.detectionInterval.value"), "매 프레임")
         XCTAssertEqual(text("limits.cpuLimit.value"), "제한 없음")
         // 성능 그래프 탭과 메뉴도 같은 프로필을 보여 준다
-        selectTab("성능 그래프")
-        waitForText("performance.applied") { $0 == "지금 적용: 성능 우선" }
+        selectTab("성능")
+        waitForText("performance.applied") { $0 == "현재 프로필: 성능 우선" }
         openMenu()
         waitForText("status.policy") { $0.hasPrefix("성능 우선") }
     }
@@ -61,26 +61,26 @@ final class SettingsUITests: GazeUITestCase {
         openSettings()
         selectTab("연산 제한")
         selectSegment("균형", in: "limits.profile")
-        waitForText("limits.activeHz.value") { $0 == "5.0회/s" }
+        waitForText("limits.activeHz.value") { $0 == "초당 5.0회" }
         // 슬라이더는 정확한 위치로 가지 않으므로 값은 범위로 확인한다
         slider("limits.activeHz").adjust(toNormalizedSliderPosition: 1)
         waitForText("limits.activeHz.value") { (self.number(in: $0) ?? 0) >= 13 }
         let activeHz = number("limits.activeHz.value") ?? 0
         XCTAssertTrue(isSegmentSelected("사용자 지정", in: "limits.profile"), "값을 바꾸면 사용자 지정")
-        XCTAssertEqual(text("limits.stillHz.value"), "2.5회/s", "나머지는 균형 값 그대로")
+        XCTAssertEqual(text("limits.stillHz.value"), "초당 2.5회", "나머지는 균형 값 그대로")
 
         let stepper = app.steppers["limits.detectionInterval"]
         stepper.incrementArrows.firstMatch.click()
-        waitForText("limits.detectionInterval.value") { $0 == "4번에 1번" }
+        waitForText("limits.detectionInterval.value") { $0 == "4프레임마다" }
         stepper.decrementArrows.firstMatch.click()
         stepper.decrementArrows.firstMatch.click()
-        waitForText("limits.detectionInterval.value") { $0 == "2번에 1번" }
-        let expected = String(format: "%.1f회/s", activeHz * 1.5)   // 처리 × (1 + 1/2)
+        waitForText("limits.detectionInterval.value") { $0 == "2프레임마다" }
+        let expected = String(format: "초당 %.1f회", activeHz * 1.5)   // 처리 × (1 + 1/2)
         waitForText("limits.estimate") { $0.contains(expected) }
 
         app.buttons["limits.resetTo.balanced"].click()
-        waitForText("limits.activeHz.value") { $0 == "5.0회/s" }
-        XCTAssertEqual(text("limits.detectionInterval.value"), "3번에 1번")
+        waitForText("limits.activeHz.value") { $0 == "초당 5.0회" }
+        XCTAssertEqual(text("limits.detectionInterval.value"), "3프레임마다")
     }
 
     func testCPULimitSliderAndCameraOffSlider() {
@@ -91,7 +91,7 @@ final class SettingsUITests: GazeUITestCase {
         slider("limits.cpuLimit").adjust(toNormalizedSliderPosition: 0)
         waitForText("limits.cpuLimit.value") { $0 == "제한 없음" }
         slider("limits.cameraOff").adjust(toNormalizedSliderPosition: 0)
-        waitForText("limits.cameraOff.value") { $0 == "끄지 않음" }
+        waitForText("limits.cameraOff.value") { $0 == "사용 안 함" }
         let boost = app.switches["limits.boost"]
         boost.click()
         waitUntil("알림 중 속도 올리기 끔") { (boost.value as? Int) == 0 || (boost.value as? String) == "0" }
@@ -130,13 +130,13 @@ final class SettingsUITests: GazeUITestCase {
         waitForText("adjust.final") { $0.hasSuffix("%") }   // 가상 사용자 위치가 미리보기에 나온다
 
         slider("adjust.offset").adjust(toNormalizedSliderPosition: 0.8)
-        waitForText("adjust.offset.value") { (self.number(in: $0) ?? 0) > 5 && $0.contains("오른쪽으로") }
+        waitForText("adjust.offset.value") { (self.number(in: $0) ?? 0) > 5 && $0.contains("오른쪽") }
         let resetPosition = app.buttons["adjust.resetPosition"]
         XCTAssertTrue(resetPosition.isEnabled)
         slider("adjust.leftGain").adjust(toNormalizedSliderPosition: 1)
         waitForText("adjust.leftGain.value") { (self.number(in: $0) ?? 0) >= 2 }
         resetPosition.click()
-        waitForText("adjust.offset.value") { $0 == "+0.0% (그대로)" }
+        waitForText("adjust.offset.value") { $0 == "+0.0%" }
         XCTAssertEqual(text("adjust.leftGain.value"), "×1.00")
         XCTAssertFalse(resetPosition.isEnabled)
 
@@ -149,8 +149,8 @@ final class SettingsUITests: GazeUITestCase {
         let resetAll = app.buttons["adjust.resetAll"]
         resetAll.click()
         waitForText("adjust.feature.1.value") { $0.hasPrefix("100%") }
-        XCTAssertEqual(app.popUpButtons["adjust.zones"].value as? String, "끔")
-        XCTAssertEqual(text("adjust.smoothing.value"), "0.80Hz · 보통")
+        XCTAssertEqual(app.popUpButtons["adjust.zones"].value as? String, "사용 안 함")
+        XCTAssertEqual(text("adjust.smoothing.value"), "0.80Hz (보통)")
     }
 
     func testCalibrationOptions() {
@@ -158,6 +158,6 @@ final class SettingsUITests: GazeUITestCase {
         choose("3개", in: "adjust.points")
         slider("adjust.seconds").adjust(toNormalizedSliderPosition: 0)
         waitForText("adjust.seconds.value") { (self.number(in: $0) ?? 9) <= 1.0 }
-        XCTAssertEqual(text("adjust.summary").hasPrefix("아직 보정하지 않아"), true)
+        XCTAssertEqual(text("adjust.summary").hasPrefix("보정하지 않아"), true)
     }
 }

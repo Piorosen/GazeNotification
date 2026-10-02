@@ -6,8 +6,8 @@ final class MenuUITests: GazeUITestCase {
         openMenu()
         waitForText("status.camera") { $0.contains("가상 카메라") }
         waitForText("status.face") { $0.hasPrefix("감지됨") }
-        XCTAssertTrue(text("status.calibration").hasPrefix("안 함"), text("status.calibration"))
-        XCTAssertTrue(text("status.aiMode").hasPrefix("76점"), text("status.aiMode"))
+        XCTAssertTrue(text("status.calibration").hasPrefix("안 됨"), text("status.calibration"))
+        XCTAssertTrue(text("status.aiMode").hasPrefix("정밀"), text("status.aiMode"))
         XCTAssertTrue(text("status.aiMode").contains("기본 추정식"), "보정 전에는 기본 추정식")
         let policy = text("status.policy")
         XCTAssertTrue(policy.contains("균형") || policy.contains("절전"), "자동 프로필: \(policy)")
@@ -41,9 +41,9 @@ final class MenuUITests: GazeUITestCase {
 
     func testCameraPreviewSwitchesToLiveRate() {
         openMenu()
-        let rateTitle = staticText(value: "움직임")
+        let rateTitle = staticText(value: "활동 중")
         let liveTitle = staticText(value: "실시간")
-        waitUntil("평소 단계(움직임)") { rateTitle.exists || self.staticText(value: "머묾").exists }
+        waitUntil("평소 단계(활동 중)") { rateTitle.exists || self.staticText(value: "시선 고정").exists }
         let preview = app.buttons["menu.preview"]
         XCTAssertTrue(preview.exists)
         preview.click()
@@ -61,7 +61,7 @@ final class MenuUITests: GazeUITestCase {
 
     func testMenuButtonsOpenSettingsOnTheRightTab() {
         openSettings(with: "menu.openPerformance")
-        XCTAssertTrue(isSelectedTab("성능 그래프"))
+        XCTAssertTrue(isSelectedTab("성능"))
         settings.buttons["_XCUI:CloseWindow"].click()
         waitUntil("설정 창이 닫혀야 함") { !self.settings.exists }
 

@@ -18,11 +18,11 @@ enum PerformanceProfile: String, CaseIterable, Identifiable, Codable {
 
     var summary: String {
         switch self {
-        case .automatic: String(localized: "전원 연결 → 균형, 배터리·저전력 모드·발열 → 절전")
-        case .performance: String(localized: "빠르게 따라가지만 전력을 가장 많이 씀")
-        case .balanced: String(localized: "평소 사용에 맞춘 기본값")
-        case .saver: String(localized: "배터리용. 시선이 바뀐 뒤 반영이 조금 늦음")
-        case .custom: String(localized: "아래 값을 직접 정함")
+        case .automatic: String(localized: "전원에 연결되어 있으면 균형, 배터리 사용 중이거나 저전력 모드 또는 발열이 높을 때는 절전을 사용합니다.")
+        case .performance: String(localized: "반응이 가장 빠르지만 전력 소비가 가장 많습니다.")
+        case .balanced: String(localized: "일반적인 사용에 권장하는 설정입니다.")
+        case .saver: String(localized: "전력 소비를 줄입니다. 시선 변화가 조금 늦게 반영됩니다.")
+        case .custom: String(localized: "아래 값을 직접 설정합니다.")
         }
     }
 
@@ -126,7 +126,7 @@ struct EffectivePolicy: Equatable {
     private static func automaticChoice(for power: PowerState) -> (PerformanceProfile, String) {
         if power.lowPowerMode { return (.saver, String(localized: "저전력 모드")) }
         switch power.thermal {
-        case .serious, .critical: return (.saver, String(localized: "발열이 높음"))
+        case .serious, .critical: return (.saver, String(localized: "발열 높음"))
         default: break
         }
         if power.onBattery {

@@ -87,18 +87,18 @@ struct LocalizationTests {
         #expect(en.localizedString(forKey: "카메라", value: nil, table: nil) == "Camera")
         #expect(ja.localizedString(forKey: "카메라", value: nil, table: nil) == "カメラ")
         #expect(zh.localizedString(forKey: "카메라", value: nil, table: nil) == "摄像头")
-        let rate = en.localizedString(forKey: "%@회/s (%@초에 1번)", value: nil, table: nil)
+        let rate = en.localizedString(forKey: "초당 %@회 (%@초마다 1회)", value: nil, table: nil)
         #expect(String(format: rate, "0.5", "2.0") == "0.5/s (once every 2.0 s)")
-        let order = en.localizedString(forKey: "실행 %@ 동안 평균 %@회/s · %@", value: nil, table: nil)
-        #expect(String(format: order, "3 min", "4.2", "Moving 80%") == "Average 4.2/s over 3 min of running · Moving 80%", "영어는 어순을 바꾼다")
+        let order = en.localizedString(forKey: "실행 %@ 동안 평균 초당 %@회 (%@)", value: nil, table: nil)
+        #expect(String(format: order, "3 min", "4.2", "Active 80%") == "Average 4.2/s over 3 min of running (Active 80%)", "영어는 어순을 바꾼다")
         let percent = ja.localizedString(forKey: "배터리 %lld%%", value: nil, table: nil)
         #expect(String(format: percent, 42) == "バッテリー 42%")
     }
 
     @Test("자리표시자 비교 도우미")
     func placeholderHelper() {
-        #expect(Self.placeholders("%@ (자동 · %@)") == Self.placeholders("%1$@ (Automatic · %2$@)"))
-        #expect(Self.placeholders("실행 %@ 동안 평균 %@회/s · %@") == Self.placeholders("Average %2$@/s over %1$@ · %3$@"))
+        #expect(Self.placeholders("%@ (자동, %@)") == Self.placeholders("%1$@ (Automatic, %2$@)"))
+        #expect(Self.placeholders("실행 %@ 동안 평균 초당 %@회 (%@)") == Self.placeholders("Average %2$@/s over %1$@ (%3$@)"))
         #expect(Self.placeholders("배터리 %lld%%") == ["1:lld"])
         #expect(Self.placeholders("%@초") != Self.placeholders("%lld s"))
     }

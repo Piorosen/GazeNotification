@@ -391,13 +391,13 @@ final class NotificationMover {
         guard let desired = desiredSlotX(), let container else { return }
         let normalized = targetProvider?() ?? 0
         if let slot = container.slotX, abs(slot - desired) < CGFloat(followThreshold) * container.screen.width {
-            onMove?(String(localized: "새 알림 → 화면 \(Int((normalized * 100).rounded()))% 위치 (사전 배치)"))
+            onMove?(String(localized: "새 알림을 화면의 \(Int((normalized * 100).rounded()))% 위치에 표시했습니다."))
             Log.info("새 알림: 사전 배치 적중 (슬롯 \(Int(slot)), 목표 \(Int(desired)))")
             return
         }
         // 사전 배치가 없거나 빗나감 → 즉시 이동 (막 슬라이드 인 하는 중이라 점프가 덜 보임)
         if placeSlot(at: desired) {
-            onMove?(String(localized: "새 알림 → 화면 \(Int((normalized * 100).rounded()))% 위치"))
+            onMove?(String(localized: "새 알림을 화면의 \(Int((normalized * 100).rounded()))% 위치에 표시했습니다."))
             Log.info("새 알림: 즉시 이동 → 슬롯 \(Int(desired)) (배너 \(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height)))")
         }
     }
@@ -607,11 +607,11 @@ struct MoverStatus: Equatable {
         var title: String {
             switch self {
             case .stopped: String(localized: "중지됨")
-            case .idle: String(localized: "대기 — 알림 없음, 창을 시선 위치에 미리 배치")
-            case .arriving: String(localized: "알림 막 뜸 — 빠르게 확인 중")
+            case .idle: String(localized: "대기 중 (알림 창을 시선 위치에 미리 배치)")
+            case .arriving: String(localized: "새 알림 확인 중")
             case .visible: String(localized: "알림 표시 중")
             case .following: String(localized: "시선을 따라 이동 중")
-            case .panel: String(localized: "알림 센터 패널 열림 — 원위치")
+            case .panel: String(localized: "알림 센터 열림 (원래 위치로 복원)")
             }
         }
     }

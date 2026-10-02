@@ -16,77 +16,77 @@ struct LimitsView: View {
                 .accessibilityIdentifier("limits.profile")
                 Text(model.profile.summary).font(.callout).foregroundStyle(.secondary)
                 if model.profile == .automatic {
-                    Text(model.policy.reason.map { String(localized: "지금: \(model.policy.applied.title) — \($0)") }
-                         ?? String(localized: "지금: \(model.policy.applied.title)"))
+                    Text(model.policy.reason.map { String(localized: "현재: \(model.policy.applied.title) (\($0))") }
+                         ?? String(localized: "현재: \(model.policy.applied.title)"))
                         .font(.callout)
                         .accessibilityIdentifier("limits.current")
                 }
             } header: {
                 Text("프로필")
             } footer: {
-                FormNote("아래 값을 바꾸면 지금 적용 중인 값을 바탕으로 \"사용자 지정\"으로 바뀝니다.")
+                FormNote("아래 값을 변경하면 현재 값을 기준으로 사용자 지정 프로필로 전환됩니다.")
             }
 
             Section {
-                LimitSlider(id: "limits.activeHz", title: "시선이 움직일 때", value: binding(\.activeHz), range: PerformanceLimits.activeRange,
+                LimitSlider(id: "limits.activeHz", title: "활동 중", value: binding(\.activeHz), range: PerformanceLimits.activeRange,
                             step: 0.5, text: hz(limits.activeHz))
-                LimitSlider(id: "limits.stillHz", title: "시선이 머물 때", value: binding(\.stillHz), range: PerformanceLimits.stillRange,
+                LimitSlider(id: "limits.stillHz", title: "시선 고정", value: binding(\.stillHz), range: PerformanceLimits.stillRange,
                             step: 0.1, text: hz(limits.stillHz))
-                LimitSlider(id: "limits.awayHz", title: "얼굴이 안 보일 때", value: binding(\.awayHz), range: PerformanceLimits.awayRange,
+                LimitSlider(id: "limits.awayHz", title: "자리 비움", value: binding(\.awayHz), range: PerformanceLimits.awayRange,
                             step: 0.1, text: hz(limits.awayHz))
-                Toggle("알림이 떠 있는 동안은 \"움직일 때\" 속도로", isOn: binding(\.boostWhileNotification))
+                Toggle("알림이 표시되는 동안 활동 중 처리 횟수 사용", isOn: binding(\.boostWhileNotification))
                     .accessibilityIdentifier("limits.boost")
             } header: {
-                Text("처리 횟수 (초당 Vision 처리)")
+                Text("초당 처리 횟수")
             } footer: {
-                FormNote("카메라 장치 fps 는 이 값 이상에서 카메라가 지원하는 가장 낮은 값으로 자동 설정됩니다\(supportedText). 보정·카메라 미리보기·보정 조정 중에는 \(Int(TrackingRate.liveHz))회/s 로 고정.")
+                FormNote("카메라 프레임 속도는 이 값 이상 중 카메라가 지원하는 가장 낮은 값으로 자동 설정됩니다\(supportedText). 보정, 카메라 미리보기, 보정 조정 중에는 초당 \(Int(TrackingRate.liveHz))회로 고정됩니다.")
             }
 
-            Section("단계 전환") {
-                LimitSlider(id: "limits.stillAfter", title: "\"머묾\"으로 보는 시간", value: binding(\.stillAfter), range: PerformanceLimits.delayRange,
+            Section("상태 전환") {
+                LimitSlider(id: "limits.stillAfter", title: "시선 고정 전환 시간", value: binding(\.stillAfter), range: PerformanceLimits.delayRange,
                             step: 0.5, text: String(localized: "\(fixed(limits.stillAfter))초"))
-                LimitSlider(id: "limits.awayAfter", title: "\"자리 비움\"으로 보는 시간", value: binding(\.awayAfter), range: PerformanceLimits.delayRange,
+                LimitSlider(id: "limits.awayAfter", title: "자리 비움 전환 시간", value: binding(\.awayAfter), range: PerformanceLimits.delayRange,
                             step: 0.5, text: String(localized: "\(fixed(limits.awayAfter))초"))
             }
 
             Section {
                 Stepper(value: binding(\.detectionInterval), in: PerformanceLimits.detectionRange) {
                     HStack {
-                        Text("얼굴 전체 검출")
+                        Text("얼굴 검출 간격")
                         Spacer()
-                        Text(limits.detectionInterval == 1 ? String(localized: "매번") : String(localized: "\(limits.detectionInterval)번에 1번"))
+                        Text(limits.detectionInterval == 1 ? String(localized: "매 프레임") : String(localized: "\(limits.detectionInterval)프레임마다"))
                             .monospacedDigit().foregroundStyle(.secondary)
                             .accessibilityIdentifier("limits.detectionInterval.value")
                     }
                 }
                 .accessibilityIdentifier("limits.detectionInterval")
-                LimitSlider(id: "limits.cpuLimit", title: "카메라·AI CPU 상한", value: binding(\.cpuLimit), range: PerformanceLimits.cpuLimitRange,
+                LimitSlider(id: "limits.cpuLimit", title: "영상 처리 CPU 한도", value: binding(\.cpuLimit), range: PerformanceLimits.cpuLimitRange,
                             step: 1, text: limits.cpuLimit == 0 ? String(localized: "제한 없음") : fixed(limits.cpuLimit, 0) + "%")
             } header: {
-                Text("연산 줄이기")
+                Text("연산 절약")
             } footer: {
-                FormNote("검출 사이 프레임은 직전 얼굴 위치를 눈에 맞춰 옮겨 랜드마크만 찾습니다 (검출 1회를 건너뛰면 CPU 약 9ms + Neural Engine 11ms 절약, 고개를 크게 돌리면 바로 다시 검출). CPU 상한은 메인 스레드를 뺀 카메라·AI CPU(코어 1개 = 100%) 기준이며, 넘으면 처리 횟수를 자동으로 줄입니다.")
+                FormNote("얼굴 검출을 건너뛴 프레임은 이전 얼굴 위치를 기준으로 추적합니다. 영상 처리 CPU가 한도를 넘으면 처리 횟수를 자동으로 줄입니다.")
             }
 
             Section {
                 LimitSlider(id: "limits.notificationCheckHz", title: "알림 창 확인", value: binding(\.notificationCheckHz),
                             range: PerformanceLimits.notificationCheckRange, step: 1, text: hz(limits.notificationCheckHz))
-                LimitSlider(id: "limits.cameraOff", title: "오래 자리 비우면 카메라 끄기", value: binding(\.cameraOffAfterAway),
+                LimitSlider(id: "limits.cameraOff", title: "자리 비움 시 카메라 끄기", value: binding(\.cameraOffAfterAway),
                             range: PerformanceLimits.cameraOffRange, step: 1,
-                            text: limits.cameraOffAfterAway == 0 ? String(localized: "끄지 않음") : String(localized: "\(Int(limits.cameraOffAfterAway))분 후"))
+                            text: limits.cameraOffAfterAway == 0 ? String(localized: "사용 안 함") : String(localized: "\(Int(limits.cameraOffAfterAway))분 후"))
             } header: {
-                Text("알림 감시 · 카메라")
+                Text("알림 및 카메라")
             } footer: {
-                FormNote("알림 창 확인은 알림이 없을 때 창 서버에 묻는 횟수입니다 (낮추면 알림 센터 패널을 열 때 원위치가 조금 늦어짐). 카메라를 끈 뒤 키보드·마우스를 쓰면 다시 켭니다. 화면이 꺼지거나 잠기면 설정과 관계없이 카메라를 끕니다.")
+                FormNote("알림 창 확인은 알림이 없을 때 알림 창 상태를 확인하는 횟수입니다. 값을 낮추면 알림 센터를 열 때 창 복원이 늦어질 수 있습니다. 카메라가 꺼진 후 키보드나 마우스를 사용하면 다시 켜집니다. 화면이 꺼지거나 잠기면 항상 카메라를 끕니다.")
             }
 
-            Section("예상") {
-                Text("시선이 움직일 때 신경망 추론 약 \(fixed(limits.activeInferencesPerSecond))회/s (얼굴 검출 \(fixed(limits.activeHz / Double(limits.detectionInterval))) + 랜드마크 \(fixed(limits.activeHz)))")
+            Section("예상 처리량") {
+                Text("활동 중 Vision 처리: 초당 \(fixed(limits.activeInferencesPerSecond))회 (얼굴 검출 \(fixed(limits.activeHz / Double(limits.detectionInterval)))회, 랜드마크 \(fixed(limits.activeHz))회)")
                     .monospacedDigit()
                     .accessibilityIdentifier("limits.estimate")
                 if model.profile == .custom {
                     HStack {
-                        Text("프로필 값으로 되돌리기")
+                        Text("프로필 값으로 재설정")
                         Spacer()
                         ForEach([PerformanceProfile.performance, .balanced, .saver]) { preset in
                             Button(preset.title) { model.customLimits = preset.presetLimits ?? .balanced }
@@ -101,8 +101,8 @@ struct LimitsView: View {
 
     private var supportedText: String {
         guard let supported = model.cameraFormat?.supportedFPS, !supported.isEmpty else { return "" }
-        let list = supported.map(formatFPS).joined(separator: "·")
-        return " " + String(localized: "(지금 카메라: \(list)fps)")
+        let list = listText(supported.map(formatFPS))
+        return " " + String(localized: "(현재 카메라: \(list)fps)")
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<PerformanceLimits, T>) -> Binding<T> {
@@ -111,7 +111,7 @@ struct LimitsView: View {
     }
 
     private func hz(_ value: Double) -> String {
-        value < 1 ? String(localized: "\(fixed(value))회/s (\(fixed(1 / value))초에 1번)") : String(localized: "\(fixed(value))회/s")
+        value < 1 ? String(localized: "초당 \(fixed(value))회 (\(fixed(1 / value))초마다 1회)") : perSecond(fixed(value))
     }
 }
 

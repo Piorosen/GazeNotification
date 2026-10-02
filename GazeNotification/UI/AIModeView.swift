@@ -12,13 +12,13 @@ struct AIModeView: View {
             estimatorSection
             Section {
                 HStack {
-                    Button("시선 보정 다시 하기") { model.startCalibration() }
+                    Button("다시 보정") { model.startCalibration() }
                         .accessibilityIdentifier("ai.recalibrate")
                         .disabled(!model.isEnabled || model.isCalibrating || model.placementSource != .gaze)
                     Spacer()
                 }
             } footer: {
-                FormNote("보정 한 번으로 세 가지 분석 방식 × 세 가지 모델을 모두 학습하므로, 이후에는 보정 없이 바꿔 가며 비교할 수 있습니다. 교차검증 오차는 보정 점을 하나씩 빼고 학습해 그 점을 맞혀 본 값이라, 처음 보는 위치를 얼마나 잘 맞힐지에 더 가깝습니다.")
+                FormNote("한 번 보정하면 모든 분석 방식과 모델이 함께 학습되므로, 다시 보정하지 않고 바꿔 가며 비교할 수 있습니다. 교차 검증 오차는 보정 점을 하나씩 제외하고 예측한 오차로, 실제 사용 시 정확도에 더 가깝습니다.")
             }
         }
         .formStyle(.grouped)
@@ -39,16 +39,16 @@ struct AIModeView: View {
         } header: {
             Text("얼굴 분석 방식")
         } footer: {
-            FormNote("오른쪽 값은 이 Mac 에서 지금 연산 장치로 실제로 잰 처리 1회당 CPU(검출 간격 포함 평균)와, 마지막 보정에서 가장 좋았던 모델의 교차검증 오차입니다. 측정값은 그 방식을 잠시 써 봐야 생깁니다.")
+            FormNote("오른쪽 값은 이 Mac에서 측정한 1회 처리당 CPU 시간과, 마지막 보정에서 가장 정확했던 모델의 오차입니다. CPU 시간은 해당 방식을 사용한 후에 표시됩니다.")
         }
     }
 
     private func modeSummary(_ mode: AnalysisMode) -> [String] {
         var lines: [String] = []
         if let cost = model.modeCosts[ModeCostKey(mode: mode, device: model.computePreference)] {
-            lines.append(String(localized: "처리 1회 CPU \(fixed(cost.cpuMs))ms"))
+            lines.append(String(localized: "1회 처리 CPU \(fixed(cost.cpuMs))ms"))
         } else {
-            lines.append(String(localized: "CPU 측정 전"))
+            lines.append(String(localized: "CPU 측정 안 됨"))
         }
         if let calibration = model.calibration, let kind = calibration.bestKind(for: mode),
            let estimator = calibration.estimator(mode, kind) {
@@ -64,13 +64,13 @@ struct AIModeView: View {
 
     private var deviceSection: some View {
         Section {
-            Picker("Vision 신경망을 돌릴 장치", selection: $model.computePreference) {
+            Picker("Vision 처리 장치", selection: $model.computePreference) {
                 ForEach(ComputePreference.allCases) { Text($0.title).tag($0) }
             }
             .accessibilityIdentifier("ai.device")
             Text(model.computePreference.detail).font(.callout).foregroundStyle(.secondary)
             let devices = model.visionDevices
-            Text("실제 지정: 얼굴 검출 \(devices.detection) · 랜드마크 76점 \(devices.landmarks76) · 65점 \(devices.landmarks65)")
+            Text("현재 할당: 얼굴 검출 \(devices.detection), 랜드마크(76개) \(devices.landmarks76), 랜드마크(65개) \(devices.landmarks65)")
                 .font(.callout)
                 .accessibilityIdentifier("ai.devices")
             let costs = ComputePreference.allCases.compactMap { device -> String? in
@@ -78,13 +78,13 @@ struct AIModeView: View {
                     .map { "\(device == .automatic ? String(localized: "자동") : device.title) \(fixed($0.cpuMs))ms" }
             }
             if !costs.isEmpty {
-                Text("\(model.analysisMode.shortTitle) 방식 처리 1회 CPU: \(costs.joined(separator: " · "))")
+                Text("\(model.analysisMode.shortTitle) 방식 1회 처리 CPU: \(listText(costs))")
                     .font(.callout).monospacedDigit()
             }
         } header: {
             Text("연산 장치")
         } footer: {
-            FormNote("장치를 바꾸면 처음 한 번은 모델을 다시 불러오느라 잠깐 느려집니다. 성능 그래프 탭에서 CPU 변화를 바로 볼 수 있습니다.")
+            FormNote("장치를 변경하면 모델을 다시 불러오는 동안 잠시 느려질 수 있습니다. CPU 변화는 성능 탭에서 확인할 수 있습니다.")
         }
     }
 
@@ -97,14 +97,14 @@ struct AIModeView: View {
             }
             .accessibilityIdentifier("ai.estimator")
             if let kind = model.estimatorChoice.kind, kind != model.activeEstimatorKind {
-                Text("\(kind.title) 모델이 \(model.analysisMode.shortTitle) 방식으로 학습되지 않아 \(model.activeEstimatorKind.title)을 씁니다.")
+                Text("\(kind.title) 모델은 \(model.analysisMode.shortTitle) 방식으로 학습되지 않아 \(model.activeEstimatorKind.title) 모델을 사용합니다.")
                     .font(.callout).foregroundStyle(.orange)
             }
             HStack {
                 Text("모델")
                 Spacer()
                 Text("학습 오차").frame(width: 70, alignment: .trailing)
-                Text("교차검증").frame(width: 70, alignment: .trailing)
+                Text("교차 검증").frame(width: 70, alignment: .trailing)
                 Text("").frame(width: 110, alignment: .leading)
             }
             .font(.caption)
@@ -130,9 +130,9 @@ struct AIModeView: View {
                 .font(.callout)
             }
         } header: {
-            Text("시선 추정 모델 — \(model.analysisMode.shortTitle) 방식")
+            Text("시선 추정 모델 (\(model.analysisMode.shortTitle) 방식)")
         } footer: {
-            FormNote("오차는 화면 폭 대비 % (RMSE). 32:9 화면에서 5%는 약 380pt 입니다. 자동은 교차검증 오차가 가장 작은 모델을 씁니다.")
+            FormNote("오차는 화면 폭에 대한 비율입니다. 자동을 선택하면 교차 검증 오차가 가장 작은 모델을 사용합니다.")
         }
     }
 
@@ -156,7 +156,7 @@ struct AIModeView: View {
         if kind != .formula, model.calibration?.estimator(model.analysisMode, kind) == nil {
             parts.append(model.calibration == nil ? String(localized: "보정 필요") : String(localized: "학습 안 됨"))
         }
-        return parts.joined(separator: " · ")
+        return listText(parts)
     }
 }
 
