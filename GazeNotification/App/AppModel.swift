@@ -264,6 +264,7 @@ final class AppModel {
     var limits: PerformanceLimits { policy.limits }
     /// CPU 상한 때문에 처리 횟수를 줄인 비율 (1 = 줄이지 않음)
     private(set) var governorScale = 1.0
+    @ObservationIgnored private var governor = CPUGovernor()
     /// nil = 카메라 켜짐
     private(set) var cameraPause: CameraPause?
     /// 알림 창이 화면에 떠 있는지
@@ -313,8 +314,10 @@ final class AppModel {
 
     // MARK: 내부
 
-    private let defaults = UserDefaults.standard
-    private let camera = CameraService()
+    private let defaults: UserDefaults
+    /// UI 테스트의 가상 사용자 (일반 실행에서는 nil)
+    private let simulation: SimulatedFaceSource?
+    private let camera: CameraService
     private let mover = NotificationMover()
     private let overlay = GazeOverlay()
     private let calibrator = CalibrationController()
@@ -336,7 +339,6 @@ final class AppModel {
     @ObservationIgnored private var sampler: Timer?
     @ObservationIgnored private var previousSample: CPUSample?
     @ObservationIgnored private let mainThreadPort = CPUClock.currentThreadPort()
-    @ObservationIgnored private var trackingCPUAverage: Double?
     @ObservationIgnored private var latestModeCosts: [ModeCostKey: ModeCost] = [:]
     @ObservationIgnored private var appliedHz: Double = 0
     @ObservationIgnored private var appliedDetectionInterval = 0
@@ -364,8 +366,14 @@ final class AppModel {
     /// 실시간 값을 SwiftUI 로 흘려보낼지
     private var publishesLiveValues: Bool { isMenuVisible || isSettingsVisible }
 
-    init() {
-        let defaults = UserDefaults.standard
+    /// - Parameters:
+    ///   - defaults: 설정 저장소 (테스트는 따로 만든 저장소를 넘긴다)
+    ///   - simulation: 카메라 대신 쓸 가상 사용자 (UI 테스트)
+    init(defaults: UserDefaults = AppEnvironment.defaults,
+         simulation: SimulatedFaceSource? = AppEnvironment.isUITesting ? SimulatedFaceSource() : nil) {
+        self.defaults = defaults
+        self.simulation = simulation
+        camera = CameraService(simulation: simulation)
         defaults.register(defaults: [
             Keys.enabled: true,
             Keys.follow: true,
@@ -433,8 +441,10 @@ final class AppModel {
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         refreshCameras()
         observeCameraDevices()
-        if !accessibilityGranted { Permissions.requestAccessibility() }
-        startPermissionPolling()
+        if AppEnvironment.usesRealDevices {
+            if !accessibilityGranted { Permissions.requestAccessibility() }
+            startPermissionPolling()
+        }
         startSampler()
         powerChanged(power)
     }
@@ -540,7 +550,8 @@ final class AppModel {
         }
     }
 
-    private func applyCalibration(_ set: CalibrationSet) {
+    /// 새 보정을 적용·저장한다 (보정 화면이 끝날 때, 테스트에서 직접)
+    func applyCalibration(_ set: CalibrationSet) {
         calibration = set
         save(set, Keys.calibration)
         // 이전 보정에 맞춰 손본 좌우 이동·범위는 새 보정에는 맞지 않는다
@@ -576,6 +587,10 @@ final class AppModel {
     /// `delay` 초 뒤 GazeNotification 이름으로 테스트 알림. 그 사이 원하는 곳을 바라보면 된다.
     /// (osascript 알림은 Script Editor 알림이 꺼져 있으면 조용히 버려져서 직접 보낸다)
     func sendTestNotification(after delay: TimeInterval = 3) {
+        guard AppEnvironment.usesRealDevices else {
+            lastEvent = "테스트 알림 — 테스트 모드에서는 보내지 않음"
+            return
+        }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             Task { @MainActor [weak self] in
@@ -666,7 +681,8 @@ final class AppModel {
             if publishesLiveValues { pipeline = latestPipeline }
         }
 
-        if isEnabled && accessibilityGranted {
+        // UI 테스트에서는 실제 NotificationCenter 창을 건드리지 않는다
+        if isEnabled && accessibilityGranted && simulation == nil {
             mover.start()
         } else {
             mover.stop()
@@ -676,6 +692,7 @@ final class AppModel {
     }
 
     private func startCameraIfAuthorized() {
+        if simulation != nil { return camera.start(deviceID: nil) }
         switch Permissions.cameraStatus {
         case .authorized:
             camera.start(deviceID: selectedCameraID)
@@ -704,6 +721,8 @@ final class AppModel {
     }
 
     private func handle(_ features: FaceFeatures?) {
+        // 가상 사용자는 보정 중이면 화면의 점을 본다
+        simulation?.lookTarget = calibrator.currentTarget
         countFrame()
         processedFrames += 1
         calibrator.ingest(features, mode: analysisMode)
@@ -827,7 +846,7 @@ final class AppModel {
         }
         policy = next
         mover.idleCheckHz = next.limits.notificationCheckHz
-        if next.limits.cpuLimit == 0 { governorScale = 1 }
+        if next.limits.cpuLimit == 0, governor.update(.off, limit: 0) { governorScale = governor.scale }
         if cameraPause == .absence, next.limits.cameraOffAfterAway == 0 { resumeCamera(reason: "자동으로 끄기 해제") }
         updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
     }
@@ -977,28 +996,20 @@ final class AppModel {
         checkAbsence(now: now)
     }
 
-    /// 카메라·AI CPU(메인 스레드 제외)가 상한을 넘으면 처리 횟수를 비례해 줄이고, 여유가 생기면 천천히 되돌린다.
+    /// 카메라·AI CPU(메인 스레드 제외)가 상한을 넘으면 처리 횟수를 비례해 줄인다 (`CPUGovernor`).
     /// 보정·미리보기(실시간) 중에는 적용하지 않는다.
     private func updateGovernor(trackingCPU: Double) {
         let limit = limits.cpuLimit
-        guard limit > 0, cameraRunning, trackingRate != .live, trackingRate != .paused else {
-            trackingCPUAverage = nil
-            if governorScale != 1, limit == 0 || !cameraRunning {
-                governorScale = 1
-                applyCaptureRate()
-            }
-            return
+        let input: CPUGovernor.Input
+        if limit == 0 || !cameraRunning {
+            input = .off
+        } else if trackingRate == .live || trackingRate == .paused {
+            input = .hold
+        } else {
+            input = .measured(trackingCPU)
         }
-        let average = trackingCPUAverage.map { $0 * 0.6 + trackingCPU * 0.4 } ?? trackingCPU
-        trackingCPUAverage = average
-        var scale = governorScale
-        if average > limit {
-            scale = max(0.05, scale * max(0.5, limit / average))
-        } else if average < limit * 0.7 {
-            scale = min(1, scale * 1.15)
-        }
-        guard abs(scale - governorScale) > 0.005 else { return }
-        governorScale = scale
+        guard governor.update(input, limit: limit) else { return }
+        governorScale = governor.scale
         applyCaptureRate()
     }
 
@@ -1033,7 +1044,7 @@ final class AppModel {
     }
 
     private func refreshCameras() {
-        cameras = CameraService.availableCameras()
+        cameras = simulation == nil ? CameraService.availableCameras() : [CameraInfo(id: "simulated", name: SimulatedFaceSource.deviceName)]
     }
 
     private func observeCameraDevices() {

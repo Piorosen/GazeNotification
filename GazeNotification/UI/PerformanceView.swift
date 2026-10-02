@@ -39,6 +39,7 @@ struct PerformanceView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .frame(width: 200)
+                    .accessibilityIdentifier("performance.range")
                     Spacer()
                     Text("1초마다 기록 (시작 후 10초는 모델 로드라 제외) · 그래프 위에 마우스를 올리면 그 시각 값")
                         .font(.caption)
@@ -46,7 +47,7 @@ struct PerformanceView: View {
                 }
 
                 ChartCard(title: "CPU 사용량", unit: "%", note: "코어 1개 = 100%. 카메라·AI = 메인 스레드를 뺀 나머지(카메라 수신·Vision·Neural Engine 드라이버)") {
-                    HistoryChart(samples: samples, domain: domain, unit: "%", selection: $selection,
+                    HistoryChart(id: "cpu", samples: samples, domain: domain, unit: "%", selection: $selection,
                                  series: [
                                      .init(name: "앱 전체", color: ChartPalette.slot1) { $0.processCPU },
                                      .init(name: "카메라·AI", color: ChartPalette.slot2) { $0.trackingCPU },
@@ -57,7 +58,7 @@ struct PerformanceView: View {
                 }
 
                 ChartCard(title: "처리 횟수", unit: "회/s", note: "처리 = Vision 을 돌린 프레임, 얼굴 검출 = 그중 전체 검출(나머지는 추적), 목표 = 지금 정책이 요청한 값") {
-                    HistoryChart(samples: samples, domain: domain, unit: "회/s", selection: $selection,
+                    HistoryChart(id: "rate", samples: samples, domain: domain, unit: "회/s", selection: $selection,
                                  series: [
                                      .init(name: "처리", color: ChartPalette.slot1) { $0.processedHz },
                                      .init(name: "얼굴 검출", color: ChartPalette.slot2) { $0.detectHz },
@@ -68,7 +69,7 @@ struct PerformanceView: View {
                 }
 
                 ChartCard(title: "1회 처리 시간", unit: "ms", note: "Neural Engine 결과를 기다리는 시간 포함. 처리하지 않은 시각은 비어 있음") {
-                    HistoryChart(samples: samples, domain: domain, unit: "ms", selection: $selection,
+                    HistoryChart(id: "time", samples: samples, domain: domain, unit: "ms", selection: $selection,
                                  series: [
                                      .init(name: "얼굴 검출", color: ChartPalette.slot1) { $0.detectHz > 0 ? $0.detectMs : nil },
                                      .init(name: "랜드마크", color: ChartPalette.slot2) { $0.processedHz > 0 ? $0.landmarksMs : nil },
@@ -94,6 +95,7 @@ private struct PolicyHeader: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text("지금 적용: \(policy.applied.title)").font(.title3.weight(.semibold))
+                    .accessibilityIdentifier("performance.applied")
                 if policy.selected == .automatic, let reason = policy.reason {
                     Text("자동 · \(reason)").foregroundStyle(.secondary)
                 }
@@ -177,6 +179,8 @@ private struct ChartCard<Content: View>: View {
 
 /// 시간축 꺾은선 그래프 + 현재 값 범례 + 마우스 위치 십자선·툴팁
 struct HistoryChart: View {
+    /// 접근성 식별자 접두사 (UI 테스트): "chart.<id>", 범례 값 "chart.<id>.legend.<순번>", 기록 수 "chart.<id>.count"
+    let id: String
     let samples: [PerformanceSample]
     let domain: ClosedRange<Date>
     let unit: String
@@ -259,18 +263,23 @@ struct HistoryChart: View {
                 }
             }
             .frame(height: 150)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("chart.\(id)")
+            .accessibilityLabel("\(samples.count)개 기록")
+            .accessibilityValue("\(samples.count)")
         }
     }
 
     /// 범례: 색 + 이름 + 값 (마우스가 없으면 최신 값). 색만으로 구분하지 않도록 값을 글자로 함께 보여 준다.
     private func legend(for sample: PerformanceSample?) -> some View {
         HStack(spacing: 14) {
-            ForEach(series) { s in
+            ForEach(Array(series.enumerated()), id: \.element.id) { index, s in
                 HStack(spacing: 5) {
                     swatch(s)
                     Text(s.name).foregroundStyle(.secondary)
                     Text(sample.flatMap(s.value).map(format) ?? "—")
                         .monospacedDigit()
+                        .accessibilityIdentifier("chart.\(id).legend.\(index)")
                 }
             }
             Spacer(minLength: 0)

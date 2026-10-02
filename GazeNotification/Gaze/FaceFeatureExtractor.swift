@@ -173,6 +173,21 @@ final class FaceFeatureExtractor {
         return Extraction(features: computed.features, timing: timing)
     }
 
+    /// 눈 위치(정규화 좌표)에서 검출 때의 관계대로 얼굴 상자를 다시 그린다. 상자가 너무 작거나 30% 넘게 이미지 밖이면 nil.
+    /// - Parameters:
+    ///   - anchor: 검출 상자 안에서 두 눈 중점의 상대 위치 (0...1)
+    ///   - spanRatio: 검출 때 눈 사이 거리 ÷ 상자 폭
+    ///   - aspect: 검출 상자 높이 ÷ 폭
+    static func trackedBox(eyeMid: CGPoint, eyeSpan: CGFloat, anchor: CGPoint, spanRatio: CGFloat, aspect: CGFloat) -> CGRect? {
+        guard spanRatio > 0, eyeSpan > 0 else { return nil }
+        let width = eyeSpan / spanRatio
+        let height = width * aspect
+        let box = CGRect(x: eyeMid.x - anchor.x * width, y: eyeMid.y - anchor.y * height, width: width, height: height)
+        let visible = box.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard box.width > 0.02, !visible.isNull, visible.width * visible.height > box.width * box.height * 0.7 else { return nil }
+        return box
+    }
+
     /// 머리 방향 방식: 얼굴 상자 위치와 yaw 만 (코·동공 없음)
     private func headPoseFeatures(_ face: VNFaceObservation, timestamp: TimeInterval) -> FaceFeatures {
         FaceFeatures(timestamp: timestamp, faceX: Double(face.boundingBox.midX), faceWidth: Double(face.boundingBox.width),
@@ -191,13 +206,11 @@ final class FaceFeatureExtractor {
                                   eyeSpan: span / box.width, current: detection, noseOffset: features.noseOffset)
             return
         }
-        guard var tracked, tracked.eyeSpan > 0 else { return }
-        let width = span / tracked.eyeSpan
-        let height = width * tracked.detection.boundingBox.height / max(tracked.detection.boundingBox.width, 1e-6)
-        let box = CGRect(x: eyeMid.x - tracked.eyeAnchor.x * width, y: eyeMid.y - tracked.eyeAnchor.y * height,
-                         width: width, height: height)
+        guard var tracked else { return }
+        let detected = tracked.detection.boundingBox
         // 상자가 이미지 밖으로 많이 나가면 다음 프레임에서 다시 검출
-        guard box.width > 0.02, box.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)).area > box.area * 0.7 else {
+        guard let box = Self.trackedBox(eyeMid: eyeMid, eyeSpan: span, anchor: tracked.eyeAnchor,
+                                        spanRatio: tracked.eyeSpan, aspect: detected.height / max(detected.width, 1e-6)) else {
             self.tracked = nil
             return
         }

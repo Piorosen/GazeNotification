@@ -23,9 +23,17 @@ enum CameraStatus: Equatable {
 /// - 처리 여부는 **시간 기준**으로 정한다 (`setProcessing(hz:)`). 장치가 5fps 밑으로 못 내려가거나,
 ///   다른 앱·미리보기 때문에 장치 fps 가 바뀌어도 Vision 처리 횟수는 목표값을 넘지 않는다.
 /// - macOS 의 세션은 연결이 바뀔 때(미리보기를 붙이거나 뗄 때 등) 장치 포맷·fps 를 preset 기본값(30fps)으로 되돌린다.
-///   그래서 받은 프레임 수를 감시해 설정과 다르면 다시 적용한다 (`checkFrameRate`, `reapplyFormat`).
+///   그래서 받은 프레임 수를 감시해 설정과 다르면 다시 적용한다 (`FrameRateWatchdog`, `reapplyFormat`).
+///
+/// `simulation` 이 있으면(UI 테스트) 카메라를 열지 않고 같은 처리 간격·통계·감시 경로로 가짜 얼굴 특징을 만든다.
 final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
+    let simulation: SimulatedFaceSource?
+
+    init(simulation: SimulatedFaceSource? = nil) {
+        self.simulation = simulation
+        super.init()
+    }
 
     /// 메인 스레드에서 호출. 얼굴이 없으면 nil.
     var onFeatures: (@MainActor (FaceFeatures?) -> Void)?
@@ -53,20 +61,14 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     private var requestedHz: Double = 5
     /// 실제로 적용한 장치 fps
     private var appliedDeviceFPS: Double = 0
-    private var watchdogFixes = 0
+    private var simulationTimer: DispatchSourceTimer?
 
     // videoQueue 전용
     private var statsWindow = StatsWindow()
-    private var processingInterval: Double = 0.2
+    private var throttle = FrameThrottle()
+    private var watchdog = FrameRateWatchdog()
     private var targetHz: Double = 5
-    private var nextDue: CFTimeInterval = 0
-    private var lastFrameTime: CFTimeInterval = 0
-    private var frameInterval: Double = 0.2
-    /// 장치가 보내야 하는 fps (감시용)
-    private var expectedFPS: Double = 0
-    private var overrunWindows = 0
-    private var lastWatchdogFix: CFTimeInterval = 0
-    private var watchdogFixesSnapshot = 0
+    private var simulatedFrames = 0
 
     // MARK: - 장치 목록
 
@@ -111,34 +113,12 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             .min { score($0) < score($1) }
     }
 
-    /// 지원 범위 중 hz 이상인 가장 낮은 fps 와 그 프레임 간격. 없으면 가장 높은 fps.
-    /// UVC 웹캠은 5/7.5/10/15/… 처럼 띄엄띄엄 지원하므로, 범위 끝값은 장치가 알려 준 간격을 그대로 쓴다
-    /// (지원하지 않는 간격을 넣으면 예외로 앱이 죽는다).
-    static func deviceRate(for hz: Double, in ranges: [AVFrameRateRange]) -> (fps: Double, duration: CMTime)? {
-        var best: (fps: Double, duration: CMTime)?
-        for range in ranges {
-            let candidate: (Double, CMTime)
-            if hz <= range.minFrameRate {
-                candidate = (range.minFrameRate, range.maxFrameDuration)
-            } else if hz < range.maxFrameRate {
-                candidate = (hz, CMTime(seconds: 1 / hz, preferredTimescale: 1_000_000))
-            } else if abs(hz - range.maxFrameRate) < 0.01 {
-                candidate = (range.maxFrameRate, range.minFrameDuration)
-            } else {
-                continue
-            }
-            if best == nil || candidate.0 < best!.fps { best = candidate }
-        }
-        if let best { return best }
-        guard let fastest = ranges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) else { return nil }
-        return (fastest.maxFrameRate, fastest.minFrameDuration)
-    }
-
     // MARK: - 제어
 
     /// deviceID 가 nil 이거나 연결되어 있지 않으면 우선순위가 가장 높은 카메라를 쓴다.
     func start(deviceID: String?) {
         sessionQueue.async { [self] in
+            if simulation != nil { return startSimulation() }
             configure(deviceID: deviceID)
             guard let device = currentInput?.device else { return }
             if !session.isRunning { session.startRunning() }
@@ -150,9 +130,10 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     func stop() {
         sessionQueue.async { [self] in
             if session.isRunning { session.stopRunning() }
+            simulationTimer?.cancel()
+            simulationTimer = nil
             appliedDeviceFPS = 0
-            watchdogFixes = 0
-            videoQueue.async { self.expectedFPS = 0; self.watchdogFixesSnapshot = 0 }
+            videoQueue.async { self.watchdog.expectedFPS = 0; self.watchdog.reset() }
             report(.idle)
         }
     }
@@ -189,17 +170,18 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     func setProcessing(hz: Double, detectionInterval: Int) {
         let hz = max(hz, 0.05)
         videoQueue.async { [self] in
-            let interval = 1 / hz
-            // 빨라질 때는 다음 프레임을 바로 처리
-            if interval < processingInterval { nextDue = 0 }
-            processingInterval = interval
+            throttle.setRate(hz)
             targetHz = hz
             extractor.detectionInterval = max(1, detectionInterval)
         }
         sessionQueue.async { [self] in
             guard abs(hz - requestedHz) > 0.001 else { return }
             requestedHz = hz
-            if let device = currentInput?.device, session.isRunning { applyFormat(to: device) }
+            if simulationTimer != nil {
+                startSimulation()
+            } else if let device = currentInput?.device, session.isRunning {
+                applyFormat(to: device)
+            }
         }
     }
 
@@ -262,7 +244,8 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     /// - Parameter force: 값이 같아 보여도 다시 설정 (장치 fps 가 몰래 바뀐 경우)
     private func applyFormat(to device: AVCaptureDevice, force: Bool = false) {
         guard let format = Self.bestFormat(for: device, targetWidth: targetWidth, hz: requestedHz),
-              let rate = Self.deviceRate(for: requestedHz, in: format.videoSupportedFrameRateRanges) else { return }
+              let rate = FrameRateRange.deviceRate(for: requestedHz,
+                                                   in: format.videoSupportedFrameRateRanges.map(FrameRateRange.init)) else { return }
         let formatChanged = device.activeFormat != format
         let rateChanged = device.activeVideoMinFrameDuration != rate.duration || device.activeVideoMaxFrameDuration != rate.duration
         guard force || formatChanged || rateChanged || appliedDeviceFPS == 0 else { return }
@@ -289,9 +272,8 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         let fps = rate.fps
         appliedDeviceFPS = fps
         videoQueue.async { [self] in
-            expectedFPS = fps
-            frameInterval = 1 / fps
-            overrunWindows = 0
+            watchdog.expectedFPS = fps
+            throttle.setDeviceFPS(fps)
         }
         let active = device.activeFormat.formatDescription
         let outFormat = (output.videoSettings?[kCVPixelBufferPixelFormatTypeKey as String] as? OSType).map(fourCC) ?? "?"
@@ -308,30 +290,57 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         }
     }
 
-    /// 받은 프레임이 설정보다 훨씬 많으면 장치 fps 가 바뀐 것 → 다시 적용. 다른 앱이 같은 카메라를 쓰면
-    /// 계속 되돌아가므로 세 번 실패하면 1분에 한 번만 시도한다 (그동안도 처리 횟수는 시간 기준으로 제한됨).
+    /// 받은 프레임이 설정보다 훨씬 많으면 장치 fps 가 바뀐 것 → 다시 적용 (그동안도 처리 횟수는 시간 기준으로 제한됨)
     private func checkFrameRate(received: Double, now: CFTimeInterval) {
-        guard expectedFPS > 0, received > expectedFPS * 1.4 + 0.5 else {
-            overrunWindows = 0
-            return
-        }
-        overrunWindows += 1
-        let backoff: CFTimeInterval = watchdogFixesSnapshot >= 3 ? 60 : 10
-        guard overrunWindows >= 2, now - lastWatchdogFix > backoff else { return }
-        overrunWindows = 0
-        lastWatchdogFix = now
-        let expected = expectedFPS
+        guard watchdog.check(received: received, at: now) else { return }
+        let expected = watchdog.expectedFPS, fixes = watchdog.fixes
         sessionQueue.async { [self] in
             guard let device = currentInput?.device, session.isRunning else { return }
-            watchdogFixes += 1
-            let fixes = watchdogFixes
-            videoQueue.async { self.watchdogFixesSnapshot = fixes }
             if fixes <= 3 {
                 Log.info(String(format: "카메라가 %.0ffps 로 보내는 중 (설정 %.1ffps) — 다시 적용", received, expected)
                     + (fixes == 3 ? " · 다른 앱이 카메라를 쓰는 중일 수 있어 이후엔 1분마다 시도" : ""))
             }
             applyFormat(to: device, force: true)
         }
+    }
+
+    // MARK: - UI 테스트용 가상 카메라 (sessionQueue)
+
+    private func startSimulation() {
+        guard let simulation else { return }
+        let ranges = SimulatedFaceSource.supportedFPS.map { FrameRateRange(minRate: $0, maxRate: $0) }
+        guard let rate = FrameRateRange.deviceRate(for: requestedHz, in: ranges) else { return }
+        simulationTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: videoQueue)
+        timer.schedule(deadline: .now(), repeating: 1 / rate.fps, leeway: .milliseconds(5))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let now = CACurrentMediaTime()
+            self.process(at: now) {
+                // 실제 추출기처럼 검출 간격을 지킨다 (머리 방향·보정 중에는 매번)
+                let interval = self.extractor.mode == .headPose || self.extractor.computeAllModes
+                    ? 1 : max(1, self.extractor.detectionInterval)
+                let detect = self.simulatedFrames % interval == 0
+                self.simulatedFrames += 1
+                return simulation.extraction(at: now, mode: self.extractor.mode,
+                                             computeAllModes: self.extractor.computeAllModes, detected: detect)
+            }
+        }
+        timer.resume()
+        simulationTimer = timer
+        appliedDeviceFPS = rate.fps
+        let fps = rate.fps
+        videoQueue.async { [self] in
+            watchdog.expectedFPS = fps
+            throttle.setDeviceFPS(fps)
+        }
+        let info = CameraFormatInfo(deviceName: SimulatedFaceSource.deviceName, width: 800, height: 448,
+                                    sourceFormat: "sim", outputFormat: "sim", deviceFPS: fps,
+                                    supportedFPS: SimulatedFaceSource.supportedFPS)
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.onFormat?(info) }
+        }
+        report(.running(SimulatedFaceSource.deviceName))
     }
 
     private func report(_ status: CameraStatus) {
@@ -344,18 +353,17 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
-        let now = CACurrentMediaTime()
+        process(at: CACurrentMediaTime()) {
+            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+            return extractor.extract(from: pixelBuffer, timestamp: CACurrentMediaTime())
+        }
+    }
+
+    /// 프레임 하나 (videoQueue): 처리 간격 확인 → 특징 추출 → 메인 스레드로 전달, 1초마다 통계
+    private func process(at now: CFTimeInterval, extract: () -> Extraction?) {
         statsWindow.received += 1
-        if lastFrameTime > 0 { frameInterval = frameInterval * 0.8 + min(now - lastFrameTime, 1) * 0.2 }
-        lastFrameTime = now
         defer { flushStatsIfNeeded(now: now) }
-
-        // 시간 기준 처리: 다음 처리 시각(반 프레임 여유)이 되기 전 프레임은 버린다
-        guard now + frameInterval * 0.5 >= nextDue else { return }
-        nextDue = now - nextDue > processingInterval ? now + processingInterval : nextDue + processingInterval
-
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let extraction = extractor.extract(from: pixelBuffer, timestamp: now)
+        guard throttle.shouldProcess(at: now), let extraction = extract() else { return }
         statsWindow.add(extraction)
         let features = extraction.features
         DispatchQueue.main.async { [weak self] in
@@ -369,7 +377,7 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         guard elapsed >= 1 else { return }
         var snapshot = statsWindow.snapshot(elapsed: elapsed)
         snapshot.targetHz = targetHz
-        snapshot.deviceFPS = expectedFPS
+        snapshot.deviceFPS = watchdog.expectedFPS
         snapshot.detectionInterval = extractor.mode == .headPose ? 1 : extractor.detectionInterval
         snapshot.mode = extractor.mode
         snapshot.devices = extractor.devices

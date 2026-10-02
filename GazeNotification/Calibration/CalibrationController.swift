@@ -70,6 +70,12 @@ final class CalibrationController {
 
     var isActive: Bool { window != nil }
 
+    /// 지금 바라봐야 하는 점의 가로 위치 (점이 보이는 동안만)
+    var currentTarget: Double? {
+        guard let state, state.phase == .moving || state.phase == .collecting else { return nil }
+        return state.targetX
+    }
+
     /// - Parameter completion: 성공하면 결과(적용은 호출한 쪽에서), 취소·실패면 nil
     func begin(on screen: NSScreen, plan: CalibrationPlan, completion: @escaping (CalibrationOutcome?) -> Void) {
         guard !isActive else { return }
@@ -82,6 +88,7 @@ final class CalibrationController {
         let window = KeyableWindow(contentRect: screen.frame, styleMask: [.borderless],
                                    backing: .buffered, defer: false)
         window.level = .screenSaver
+        window.identifier = NSUserInterfaceItemIdentifier("calibration")
         window.isOpaque = false
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
@@ -196,7 +203,9 @@ private struct CalibrationView: View {
                 VStack(spacing: 14) {
                     Text(title)
                         .font(.system(size: 34, weight: .semibold))
+                        .accessibilityIdentifier("calibration.title")
                     Text(subtitle)
+                        .accessibilityIdentifier("calibration.subtitle")
                         .font(.system(size: 18))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -28,6 +28,7 @@ struct MenuView: View {
                     Label("시선 보정", systemImage: "scope")
                         .frame(maxWidth: .infinity)
                 }
+                .accessibilityIdentifier("menu.calibrate")
                 .buttonStyle(.borderedProminent)
                 .disabled(!model.isEnabled || model.isCalibrating || model.placementSource != .gaze)
 
@@ -38,6 +39,7 @@ struct MenuView: View {
                     Label("테스트 알림", systemImage: "bell.badge")
                         .frame(maxWidth: .infinity)
                 }
+                .accessibilityIdentifier("menu.testNotification")
                 .disabled(!model.isEnabled)
             }
             .controlSize(.large)
@@ -50,6 +52,7 @@ struct MenuView: View {
                     Label("성능 그래프·연산 제한", systemImage: "chart.xyaxis.line")
                         .frame(maxWidth: .infinity)
                 }
+                .accessibilityIdentifier("menu.openPerformance")
                 Button {
                     dismiss()
                     model.openSettings(.calibration)
@@ -57,6 +60,7 @@ struct MenuView: View {
                     Label("보정 직접 조정", systemImage: "slider.horizontal.3")
                         .frame(maxWidth: .infinity)
                 }
+                .accessibilityIdentifier("menu.openAdjust")
             }
 
             if let event = model.lastEvent {
@@ -64,6 +68,7 @@ struct MenuView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .accessibilityIdentifier("menu.lastEvent")
             }
 
             DisclosureGroup(isExpanded: $showPipeline) {
@@ -115,6 +120,7 @@ struct MenuView: View {
             Toggle("", isOn: $model.isEnabled)
                 .toggleStyle(.switch)
                 .labelsHidden()
+                .accessibilityIdentifier("menu.enabled")
         }
     }
 
@@ -136,19 +142,19 @@ struct MenuView: View {
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            StatusRow(title: "카메라", value: cameraText, color: cameraColor)
+            StatusRow(id: "camera", title: "카메라", value: cameraText, color: cameraColor)
             if model.placementSource == .gaze {
-                StatusRow(title: "얼굴",
+                StatusRow(id: "face", title: "얼굴",
                           value: model.faceDetected ? String(format: "감지됨 · %.0f fps", model.fps) : "감지 안 됨",
                           color: model.faceDetected ? .green : .orange)
-                StatusRow(title: "보정", value: calibrationText, color: model.calibration == nil ? .orange : .green)
+                StatusRow(id: "calibration", title: "보정", value: calibrationText, color: model.calibration == nil ? .orange : .green)
             }
-            StatusRow(title: "손쉬운 사용",
+            StatusRow(id: "accessibility", title: "손쉬운 사용",
                       value: model.accessibilityGranted ? "허용됨" : "필요",
                       color: model.accessibilityGranted ? .green : .red)
-            StatusRow(title: "연산", value: policyText, color: model.cameraPause == nil ? .green : .secondary)
+            StatusRow(id: "policy", title: "연산", value: policyText, color: model.cameraPause == nil ? .green : .secondary)
             if model.placementSource == .gaze {
-                StatusRow(title: "AI 모드",
+                StatusRow(id: "aiMode", title: "AI 모드",
                           value: "\(model.analysisMode.shortTitle) · \(model.activeEstimatorKind.title) · \(model.visionDevices.detection)",
                           color: .green)
             }
@@ -171,6 +177,7 @@ struct MenuView: View {
                 ForEach(PlacementSource.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("menu.placementSource")
 
             if model.placementSource == .gaze {
                 Picker("카메라", selection: $model.selectedCameraID) {
@@ -207,6 +214,7 @@ struct MenuView: View {
             Spacer()
 
             Button("종료") { NSApp.terminate(nil) }
+                .accessibilityIdentifier("menu.quit")
                 .keyboardShortcut("q")
         }
         .font(.callout)
@@ -254,6 +262,8 @@ struct MenuView: View {
 }
 
 private struct StatusRow: View {
+    /// 값 글자의 접근성 식별자 "status.<id>" (UI 테스트)
+    let id: String
     let title: String
     let value: String
     let color: Color
@@ -267,6 +277,7 @@ private struct StatusRow: View {
             Text(value)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .accessibilityIdentifier("status.\(id)")
             Spacer(minLength: 0)
         }
         .font(.callout)

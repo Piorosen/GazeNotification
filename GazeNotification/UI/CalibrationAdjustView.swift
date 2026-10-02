@@ -11,6 +11,7 @@ struct CalibrationAdjustView: View {
                 AdjustPreview(raw: model.rawGazeX, final: model.gazeX, faceDetected: model.faceDetected,
                               zones: model.adjustment.zones, aspectRatio: model.screenAspectRatio)
                 Toggle("조정하는 동안 화면 상단에 위치 막대 표시", isOn: $model.showOverlayWhileAdjusting)
+                    .accessibilityIdentifier("adjust.overlay")
             } header: {
                 Text("미리보기")
             } footer: {
@@ -24,6 +25,7 @@ struct CalibrationAdjustView: View {
 
             Section {
                 Button("수동 보정값 모두 초기화", role: .destructive) { model.resetAdjustment() }
+                    .accessibilityIdentifier("adjust.resetAll")
                     .disabled(model.adjustment == GazeAdjustment())
             }
         }
@@ -40,6 +42,7 @@ struct CalibrationAdjustView: View {
                             estimator.crossValidationRMSE.map { String(format: " · 교차검증 %.1f%%", $0 * 100) } ?? "",
                             estimator.regression.sampleCount)
                      + calibration.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .accessibilityIdentifier("adjust.summary")
                 let results = estimator.targetResults
                 if !results.isEmpty {
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 2) {
@@ -56,19 +59,24 @@ struct CalibrationAdjustView: View {
                 }
             } else if model.calibration != nil {
                 Text("지금 AI 모드(\(model.analysisMode.shortTitle) · \(model.activeEstimatorKind.title))로 학습한 보정이 없어 기본 추정식을 씁니다. 시선 보정을 다시 하면 모든 방식·모델을 학습합니다.")
+                    .accessibilityIdentifier("adjust.summary")
             } else {
                 Text("아직 보정하지 않아 기본 추정식을 씁니다. 먼저 시선 보정을 하세요.")
+                    .accessibilityIdentifier("adjust.summary")
             }
             HStack {
                 Button("시선 보정 다시 하기") { model.startCalibration() }
+                    .accessibilityIdentifier("adjust.recalibrate")
                 Button("빠른 위치 맞춤 (3점, 약 10초)") { model.startQuickAdjust() }
+                    .accessibilityIdentifier("adjust.quick")
                 Spacer()
             }
             .disabled(!model.isEnabled || model.isCalibrating || model.placementSource != .gaze)
             Picker("보정 점 개수", selection: $model.calibrationPointCount) {
                 ForEach([3, 5, 7, 9], id: \.self) { Text("\($0)개").tag($0) }
             }
-            LimitSlider(title: "점 하나를 보는 시간", value: $model.calibrationSeconds, range: 0.8...4, step: 0.2,
+            .accessibilityIdentifier("adjust.points")
+            LimitSlider(id: "adjust.seconds", title: "점 하나를 보는 시간", value: $model.calibrationSeconds, range: 0.8...4, step: 0.2,
                         text: String(format: "%.1f초", model.calibrationSeconds))
         } header: {
             Text("학습한 보정")
@@ -82,16 +90,17 @@ struct CalibrationAdjustView: View {
 
     private var positionSection: some View {
         Section {
-            LimitSlider(title: "좌우 이동", value: $model.adjustment.offset, range: GazeAdjustment.offsetRange, step: 0.005,
+            LimitSlider(id: "adjust.offset", title: "좌우 이동", value: $model.adjustment.offset, range: GazeAdjustment.offsetRange, step: 0.005,
                         text: String(format: "%+.1f%% (%@)", model.adjustment.offset * 100,
                                      model.adjustment.offset == 0 ? "그대로" : (model.adjustment.offset > 0 ? "오른쪽으로" : "왼쪽으로")))
-            LimitSlider(title: "왼쪽 범위", value: $model.adjustment.leftGain, range: GazeAdjustment.gainRange, step: 0.05,
+            LimitSlider(id: "adjust.leftGain", title: "왼쪽 범위", value: $model.adjustment.leftGain, range: GazeAdjustment.gainRange, step: 0.05,
                         text: String(format: "×%.2f", model.adjustment.leftGain))
-            LimitSlider(title: "오른쪽 범위", value: $model.adjustment.rightGain, range: GazeAdjustment.gainRange, step: 0.05,
+            LimitSlider(id: "adjust.rightGain", title: "오른쪽 범위", value: $model.adjustment.rightGain, range: GazeAdjustment.gainRange, step: 0.05,
                         text: String(format: "×%.2f", model.adjustment.rightGain))
             HStack {
                 Spacer()
                 Button("위치 초기화") { model.adjustment = model.adjustment.resettingPosition() }
+                    .accessibilityIdentifier("adjust.resetPosition")
                     .disabled(model.adjustment.isPositionDefault)
             }
         } header: {
@@ -108,7 +117,7 @@ struct CalibrationAdjustView: View {
             ForEach(GazeFeature.allCases) { feature in
                 let term = model.gazeBreakdown?.terms.first { $0.feature == feature }
                 VStack(alignment: .leading, spacing: 2) {
-                    LimitSlider(title: feature.title, value: $model.adjustment.featureGains[feature.rawValue],
+                    LimitSlider(id: "adjust.feature.\(feature.rawValue)", title: feature.title, value: $model.adjustment.featureGains[feature.rawValue],
                                 range: GazeAdjustment.featureGainRange, step: 0.05,
                                 text: featureText(model.adjustment.featureGains[feature.rawValue], term: term))
                     Text(feature.detail).font(.caption2).foregroundStyle(.secondary)
@@ -133,11 +142,11 @@ struct CalibrationAdjustView: View {
 
     private var motionSection: some View {
         Section {
-            LimitSlider(title: "떨림 억제 (기본 반응 속도)", value: $model.adjustment.smoothing,
+            LimitSlider(id: "adjust.smoothing", title: "떨림 억제 (기본 반응 속도)", value: $model.adjustment.smoothing,
                         range: GazeAdjustment.smoothingRange, step: 0.05,
                         text: String(format: "%.2fHz · %@", model.adjustment.smoothing,
                                      model.adjustment.smoothing < 0.6 ? "부드럽게" : (model.adjustment.smoothing > 1.5 ? "빠르게" : "보통")))
-            LimitSlider(title: "큰 시선 이동에 반응", value: $model.adjustment.responsiveness,
+            LimitSlider(id: "adjust.responsiveness", title: "큰 시선 이동에 반응", value: $model.adjustment.responsiveness,
                         range: GazeAdjustment.responsivenessRange, step: 0.1,
                         text: String(format: "%.1f", model.adjustment.responsiveness))
             Picker("구역 나누기", selection: $model.adjustment.zones) {
@@ -145,7 +154,8 @@ struct CalibrationAdjustView: View {
                     Text(zones == 0 ? "끔" : "\(zones)구역").tag(zones)
                 }
             }
-            LimitSlider(title: "떠 있는 알림이 따라오는 최소 이동", value: $model.adjustment.followThreshold,
+            .accessibilityIdentifier("adjust.zones")
+            LimitSlider(id: "adjust.follow", title: "떠 있는 알림이 따라오는 최소 이동", value: $model.adjustment.followThreshold,
                         range: GazeAdjustment.followRange, step: 0.01,
                         text: String(format: "화면 폭의 %.0f%%", model.adjustment.followThreshold * 100))
         } header: {
@@ -218,11 +228,13 @@ private struct AdjustPreview: View {
                     Circle().strokeBorder(Color.secondary, lineWidth: 2).frame(width: 10, height: 10)
                     Text("모델 출력 (조정 전)").foregroundStyle(.secondary)
                     Text(raw.map { String(format: "%.0f%%", $0 * 100) } ?? "—").monospacedDigit()
+                        .accessibilityIdentifier("adjust.raw")
                 }
                 HStack(spacing: 5) {
                     Circle().fill(Color.accentColor).frame(width: 10, height: 10)
                     Text("최종 위치 · 알림 자리(막대)").foregroundStyle(.secondary)
                     Text(final.map { String(format: "%.0f%%", $0 * 100) } ?? "—").monospacedDigit()
+                        .accessibilityIdentifier("adjust.final")
                 }
             }
             .font(.caption)

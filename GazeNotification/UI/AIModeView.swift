@@ -13,6 +13,7 @@ struct AIModeView: View {
             Section {
                 HStack {
                     Button("시선 보정 다시 하기") { model.startCalibration() }
+                        .accessibilityIdentifier("ai.recalibrate")
                         .disabled(!model.isEnabled || model.isCalibrating || model.placementSource != .gaze)
                     Spacer()
                 }
@@ -33,6 +34,8 @@ struct AIModeView: View {
                         trailing: modeSummary(mode)) {
                     model.analysisMode = mode
                 }
+                .accessibilityIdentifier("ai.mode.\(mode.rawValue)")
+                .accessibilityAddTraits(model.analysisMode == mode ? .isSelected : [])
             }
         } header: {
             Text("얼굴 분석 방식")
@@ -66,10 +69,12 @@ struct AIModeView: View {
             Picker("Vision 신경망을 돌릴 장치", selection: $model.computePreference) {
                 ForEach(ComputePreference.allCases) { Text($0.title).tag($0) }
             }
+            .accessibilityIdentifier("ai.device")
             Text(model.computePreference.detail).font(.callout).foregroundStyle(.secondary)
             let devices = model.visionDevices
             Text("실제 지정: 얼굴 검출 \(devices.detection) · 랜드마크 76점 \(devices.landmarks76) · 65점 \(devices.landmarks65)")
                 .font(.callout)
+                .accessibilityIdentifier("ai.devices")
             let costs = ComputePreference.allCases.compactMap { device -> String? in
                 model.modeCosts[ModeCostKey(mode: model.analysisMode, device: device)]
                     .map { String(format: "%@ %.1fms", device == .automatic ? "자동" : device.title, $0.cpuMs) }
@@ -92,6 +97,7 @@ struct AIModeView: View {
             Picker("시선 추정 모델", selection: $model.estimatorChoice) {
                 ForEach(EstimatorChoice.allCases) { Text($0.title).tag($0) }
             }
+            .accessibilityIdentifier("ai.estimator")
             if let kind = model.estimatorChoice.kind, kind != model.activeEstimatorKind {
                 Text("\(kind.title) 모델이 \(model.analysisMode.shortTitle) 방식으로 학습되지 않아 \(model.activeEstimatorKind.title)을 씁니다.")
                     .font(.callout).foregroundStyle(.orange)
@@ -114,8 +120,11 @@ struct AIModeView: View {
                     }
                     Spacer(minLength: 12)
                     Text(errorText(training: kind)).monospacedDigit().frame(width: 70, alignment: .trailing)
+                        .accessibilityIdentifier("ai.estimator.\(kind.rawValue).training")
                     Text(errorText(crossValidation: kind)).monospacedDigit().frame(width: 70, alignment: .trailing)
+                        .accessibilityIdentifier("ai.estimator.\(kind.rawValue).cv")
                     Text(statusText(kind))
+                        .accessibilityIdentifier("ai.estimator.\(kind.rawValue).status")
                         .font(.caption)
                         .foregroundStyle(kind == model.activeEstimatorKind ? Color.accentColor : .secondary)
                         .frame(width: 110, alignment: .leading)

@@ -13,10 +13,12 @@ struct LimitsView: View {
                     ForEach(PerformanceProfile.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .accessibilityIdentifier("limits.profile")
                 Text(model.profile.summary).font(.callout).foregroundStyle(.secondary)
                 if model.profile == .automatic {
                     Text("지금: \(model.policy.applied.title)" + (model.policy.reason.map { " — \($0)" } ?? ""))
                         .font(.callout)
+                        .accessibilityIdentifier("limits.current")
                 }
             } header: {
                 Text("프로필")
@@ -25,13 +27,14 @@ struct LimitsView: View {
             }
 
             Section {
-                LimitSlider(title: "시선이 움직일 때", value: binding(\.activeHz), range: PerformanceLimits.activeRange,
+                LimitSlider(id: "limits.activeHz", title: "시선이 움직일 때", value: binding(\.activeHz), range: PerformanceLimits.activeRange,
                             step: 0.5, text: hz(limits.activeHz))
-                LimitSlider(title: "시선이 머물 때", value: binding(\.stillHz), range: PerformanceLimits.stillRange,
+                LimitSlider(id: "limits.stillHz", title: "시선이 머물 때", value: binding(\.stillHz), range: PerformanceLimits.stillRange,
                             step: 0.1, text: hz(limits.stillHz))
-                LimitSlider(title: "얼굴이 안 보일 때", value: binding(\.awayHz), range: PerformanceLimits.awayRange,
+                LimitSlider(id: "limits.awayHz", title: "얼굴이 안 보일 때", value: binding(\.awayHz), range: PerformanceLimits.awayRange,
                             step: 0.1, text: hz(limits.awayHz))
                 Toggle("알림이 떠 있는 동안은 \"움직일 때\" 속도로", isOn: binding(\.boostWhileNotification))
+                    .accessibilityIdentifier("limits.boost")
             } header: {
                 Text("처리 횟수 (초당 Vision 처리)")
             } footer: {
@@ -39,9 +42,9 @@ struct LimitsView: View {
             }
 
             Section("단계 전환") {
-                LimitSlider(title: "\"머묾\"으로 보는 시간", value: binding(\.stillAfter), range: PerformanceLimits.delayRange,
+                LimitSlider(id: "limits.stillAfter", title: "\"머묾\"으로 보는 시간", value: binding(\.stillAfter), range: PerformanceLimits.delayRange,
                             step: 0.5, text: String(format: "%.1f초", limits.stillAfter))
-                LimitSlider(title: "\"자리 비움\"으로 보는 시간", value: binding(\.awayAfter), range: PerformanceLimits.delayRange,
+                LimitSlider(id: "limits.awayAfter", title: "\"자리 비움\"으로 보는 시간", value: binding(\.awayAfter), range: PerformanceLimits.delayRange,
                             step: 0.5, text: String(format: "%.1f초", limits.awayAfter))
             }
 
@@ -52,9 +55,11 @@ struct LimitsView: View {
                         Spacer()
                         Text(limits.detectionInterval == 1 ? "매번" : "\(limits.detectionInterval)번에 1번")
                             .monospacedDigit().foregroundStyle(.secondary)
+                            .accessibilityIdentifier("limits.detectionInterval.value")
                     }
                 }
-                LimitSlider(title: "카메라·AI CPU 상한", value: binding(\.cpuLimit), range: PerformanceLimits.cpuLimitRange,
+                .accessibilityIdentifier("limits.detectionInterval")
+                LimitSlider(id: "limits.cpuLimit", title: "카메라·AI CPU 상한", value: binding(\.cpuLimit), range: PerformanceLimits.cpuLimitRange,
                             step: 1, text: limits.cpuLimit == 0 ? "제한 없음" : String(format: "%.0f%%", limits.cpuLimit))
             } header: {
                 Text("연산 줄이기")
@@ -64,9 +69,9 @@ struct LimitsView: View {
             }
 
             Section {
-                LimitSlider(title: "알림 창 확인", value: binding(\.notificationCheckHz),
+                LimitSlider(id: "limits.notificationCheckHz", title: "알림 창 확인", value: binding(\.notificationCheckHz),
                             range: PerformanceLimits.notificationCheckRange, step: 1, text: hz(limits.notificationCheckHz))
-                LimitSlider(title: "오래 자리 비우면 카메라 끄기", value: binding(\.cameraOffAfterAway),
+                LimitSlider(id: "limits.cameraOff", title: "오래 자리 비우면 카메라 끄기", value: binding(\.cameraOffAfterAway),
                             range: PerformanceLimits.cameraOffRange, step: 1,
                             text: limits.cameraOffAfterAway == 0 ? "끄지 않음" : "\(Int(limits.cameraOffAfterAway))분 후")
             } header: {
@@ -80,12 +85,14 @@ struct LimitsView: View {
                 Text(String(format: "시선이 움직일 때 신경망 추론 약 %.1f회/s (얼굴 검출 %.1f + 랜드마크 %.1f)",
                             limits.activeInferencesPerSecond, limits.activeHz / Double(limits.detectionInterval), limits.activeHz))
                     .monospacedDigit()
+                    .accessibilityIdentifier("limits.estimate")
                 if model.profile == .custom {
                     HStack {
                         Text("프로필 값으로 되돌리기")
                         Spacer()
                         ForEach([PerformanceProfile.performance, .balanced, .saver]) { preset in
                             Button(preset.title) { model.customLimits = preset.presetLimits ?? .balanced }
+                                .accessibilityIdentifier("limits.resetTo.\(preset.rawValue)")
                         }
                     }
                 }
@@ -111,6 +118,8 @@ struct LimitsView: View {
 
 /// 제목 · 슬라이더 · 현재 값
 struct LimitSlider: View {
+    /// 접근성 식별자 (UI 테스트). 값 글자는 "<id>.value"
+    let id: String
     let title: String
     @Binding var value: Double
     let range: ClosedRange<Double>
@@ -124,7 +133,10 @@ struct LimitSlider: View {
             Slider(value: Binding(get: { value },
                                   set: { value = (($0 / step).rounded() * step).clamped(to: range) }),
                    in: range)
+                .accessibilityIdentifier(id)
+                .accessibilityLabel(title)
             Text(text)
+                .accessibilityIdentifier(id + ".value")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 150, alignment: .trailing)

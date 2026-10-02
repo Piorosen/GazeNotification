@@ -7,6 +7,7 @@ struct GazeNotificationApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuView(model: appDelegate.model)
+                .defaultAppStorage(AppEnvironment.defaults)
         } label: {
             MenuBarLabel(model: appDelegate.model)
         }
@@ -20,8 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationSource: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 단위 테스트 호스트로 뜬 경우: 카메라·감시를 시작하지 않는다 (테스트가 필요한 객체를 직접 만든다)
+        guard !AppEnvironment.isUnitTesting else { return }
         model.start()
-        DebugCommands.install(model: model)
+        if !AppEnvironment.isUITesting { DebugCommands.install(model: model) }
 
         // kill/pkill(SIGTERM) 로 끝나도 알림 창을 원위치시키도록 정상 종료 경로로 돌린다
         signal(SIGTERM, SIG_IGN)

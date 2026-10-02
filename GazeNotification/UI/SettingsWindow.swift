@@ -16,7 +16,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let window = self.window ?? makeWindow()
         self.window = window
         if window.contentView == nil {
-            window.contentView = NSHostingView(rootView: SettingsView(model: model))
+            window.contentView = NSHostingView(rootView: SettingsView(model: model)
+                .defaultAppStorage(AppEnvironment.defaults))
         }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
@@ -28,6 +29,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "GazeNotification 설정"
+        window.identifier = NSUserInterfaceItemIdentifier("settings")
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 680, height: 520)
         window.center()

@@ -439,19 +439,29 @@ final class NotificationMover {
     /// 목표 배너 x (화면 안으로 제한)
     private func desiredSlotX() -> CGFloat? {
         guard let container, let normalized = targetProvider?() else { return nil }
-        let screen = container.screen
-        let width = container.bannerWidth
+        return Self.slotX(normalized: normalized, screen: container.screen, bannerWidth: container.bannerWidth,
+                          edgeMargin: edgeMargin)
+    }
+
+    /// 배너 가운데가 화면 가로 위치 `normalized` 에 오도록 하는 배너 왼쪽 x (화면 양 끝 여백 안으로 제한)
+    nonisolated static func slotX(normalized: Double, screen: CGRect, bannerWidth width: CGFloat, edgeMargin: CGFloat) -> CGFloat {
         let center = screen.minX + CGFloat(normalized.clamped(to: 0...1)) * screen.width
         let minX = screen.minX + edgeMargin
         let maxX = max(minX, screen.maxX - width - edgeMargin)
         return (center - width / 2).clamped(to: minX...maxX)
     }
 
+    /// 배너가 `slotX` 에 멈추게 하는 창 x. 배너는 창 오른쪽 끝 − 여백 − 배너 폭 자리로 슬라이드해 들어온다.
+    nonisolated static func windowX(slotX: CGFloat, rightMargin: CGFloat, bannerWidth: CGFloat, windowWidth: CGFloat) -> CGFloat {
+        slotX + rightMargin + bannerWidth - windowWidth
+    }
+
     /// 배너가 멈추는 위치가 x 가 되도록 창을 옮긴다. 창 폭/높이는 고정이므로 AX 호출 1회.
     @discardableResult
     private func placeSlot(at x: CGFloat) -> Bool {
         guard var container else { return false }
-        let windowX = x + container.rightMargin + container.bannerWidth - container.width
+        let windowX = Self.windowX(slotX: x, rightMargin: container.rightMargin, bannerWidth: container.bannerWidth,
+                                   windowWidth: container.width)
         let result = AX.setPosition(container.window, CGPoint(x: windowX, y: container.y))
         guard result == .success else {
             if result == .invalidUIElement { self.container = nil }
