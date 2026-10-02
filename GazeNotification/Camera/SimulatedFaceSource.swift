@@ -3,7 +3,8 @@ import Foundation
 /// UI 테스트용 가상 카메라: 실제 카메라·Vision 대신 "가상 사용자"의 얼굴 특징을 만든다.
 ///
 /// 가상 사용자는 `lookTarget` 이 있으면 그 점을 보고(보정 중에는 화면의 점), 없으면 화면을 좌우로 천천히 오간다.
-/// 특징은 실제 측정에서 본 관계를 흉내 낸다: 머리 yaw = −atan(2.4·(x−0.5))·0.8, 코 방향 ≈ −yaw/2, 동공은 남은 눈 움직임.
+/// 특징은 실제 측정에서 본 관계를 흉내 낸다: 머리 yaw = −atan(2.4·(x−0.5))·0.8, 코 방향 ≈ yaw/2 (실측에서 둘의 부호가 같음),
+/// 동공은 남은 눈 움직임. 오른쪽을 볼수록 코·동공·yaw 값은 작아진다 (`FaceFeatures` 의 부호 규칙).
 /// 여러 스레드에서 쓰므로 바뀌는 값은 잠금으로 보호한다.
 final class SimulatedFaceSource: @unchecked Sendable {
     static let deviceName = "가상 카메라 (UI 테스트)"
@@ -56,7 +57,7 @@ final class SimulatedFaceSource: @unchecked Sendable {
         if mode == .headPose {
             return FaceFeatures(timestamp: time, faceX: faceX, faceWidth: 0.18, noseOffset: .nan, pupilOffset: nil, yaw: yaw)
         }
-        let nose = -yaw / 2 + sin(time * 5.1) * 0.003
+        let nose = yaw / 2 + sin(time * 5.1) * 0.003
         let pupil = -c * 0.15 + sin(time * 3.7) * 0.004
         return FaceFeatures(timestamp: time, faceX: faceX, faceWidth: 0.18, noseOffset: nose, pupilOffset: pupil, yaw: yaw)
     }
