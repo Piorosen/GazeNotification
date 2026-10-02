@@ -61,7 +61,7 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-# GazeNoti
+# GazeNotification
 ## 빌드 산출물 (scripts/run.sh 의 -derivedDataPath)
 build/
 DerivedData/

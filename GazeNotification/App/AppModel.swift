@@ -186,7 +186,7 @@ final class AppModel {
     }
 
     func start() {
-        Log.info("GazeNoti 시작 (AX 권한: \(accessibilityGranted), 보정: \(calibration != nil))")
+        Log.info("GazeNotification 시작 (AX 권한: \(accessibilityGranted), 보정: \(calibration != nil))")
         camera.onFeatures = { [weak self] features in self?.handle(features) }
         camera.onStatus = { [weak self] status in self?.cameraStatus = status }
         camera.onFormat = { [weak self] info in self?.cameraFormat = info }
@@ -240,7 +240,7 @@ final class AppModel {
         lastEvent = "보정 초기화 — 기본 추정식 사용"
     }
 
-    /// `delay` 초 뒤 GazeNoti 이름으로 테스트 알림. 그 사이 원하는 곳을 바라보면 된다.
+    /// `delay` 초 뒤 GazeNotification 이름으로 테스트 알림. 그 사이 원하는 곳을 바라보면 된다.
     /// (osascript 알림은 Script Editor 알림이 꺼져 있으면 조용히 버려져서 직접 보낸다)
     func sendTestNotification(after delay: TimeInterval = 3) {
         let center = UNUserNotificationCenter.current()
@@ -248,16 +248,16 @@ final class AppModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard granted else {
-                    self.lastEvent = "알림 권한이 없습니다 — 시스템 설정 → 알림 → GazeNoti 허용"
+                    self.lastEvent = "알림 권한이 없습니다 — 시스템 설정 → 알림 → GazeNotification 허용"
                     Log.error("알림 권한 거부: \(error?.localizedDescription ?? "-")")
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = "GazeNoti 테스트"
+                content.title = "GazeNotification 테스트"
                 content.body = "보고 있던 곳에 알림이 떴나요?"
                 content.sound = .default
                 let trigger = delay > 0 ? UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false) : nil
-                let request = UNNotificationRequest(identifier: "gazenoti.test.\(UUID().uuidString)",
+                let request = UNNotificationRequest(identifier: "gazenotification.test.\(UUID().uuidString)",
                                                     content: content, trigger: trigger)
                 Task {
                     do { try await center.add(request) } catch {
@@ -568,7 +568,7 @@ enum TrackingRate: CaseIterable {
 
 /// 메뉴에 1초마다 보여 주는 요약
 struct LiveStats: Equatable {
-    /// GazeNoti 프로세스 전체 CPU (코어 1개 = 100%)
+    /// GazeNotification 프로세스 전체 CPU (코어 1개 = 100%)
     var processCPUPercent: Double = 0
     var ticksPerSecond: Double = 0
     var windowChecksPerSecond: Double = 0

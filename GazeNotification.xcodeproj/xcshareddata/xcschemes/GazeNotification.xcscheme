@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "7A0000000000000000000006"
-               BuildableName = "GazeNoti.app"
-               BlueprintName = "GazeNoti"
-               ReferencedContainer = "container:GazeNoti.xcodeproj">
+               BuildableName = "GazeNotification.app"
+               BlueprintName = "GazeNotification"
+               ReferencedContainer = "container:GazeNotification.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -43,9 +43,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7A0000000000000000000006"
-            BuildableName = "GazeNoti.app"
-            BlueprintName = "GazeNoti"
-            ReferencedContainer = "container:GazeNoti.xcodeproj">
+            BuildableName = "GazeNotification.app"
+            BlueprintName = "GazeNotification"
+            ReferencedContainer = "container:GazeNotification.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -60,9 +60,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7A0000000000000000000006"
-            BuildableName = "GazeNoti.app"
-            BlueprintName = "GazeNoti"
-            ReferencedContainer = "container:GazeNoti.xcodeproj">
+            BuildableName = "GazeNotification.app"
+            BlueprintName = "GazeNotification"
+            ReferencedContainer = "container:GazeNotification.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

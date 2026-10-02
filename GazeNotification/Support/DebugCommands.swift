@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 
 /// 개발용: 터미널에서 분산 알림으로 앱을 조작한다 (`scripts/debug.sh test|dump|status`).
-/// Debug 빌드는 항상, Release 빌드는 `defaults write party.udon.GazeNoti debugCommands -bool YES` 일 때만 켜진다.
+/// Debug 빌드는 항상, Release 빌드는 `defaults write party.udon.GazeNotification debugCommands -bool YES` 일 때만 켜진다.
 @MainActor
 enum DebugCommands {
-    static let prefix = "party.udon.GazeNoti.debug."
+    static let prefix = "party.udon.GazeNotification.debug."
 
     static var isEnabled: Bool {
         #if DEBUG
@@ -37,7 +37,7 @@ enum DebugCommands {
 }
 
 extension DebugCommands {
-    /// 메뉴 패널을 화면 밖 창에 그려 ~/Library/Logs/GazeNoti/menu.png 로 저장 (레이아웃 확인용)
+    /// 메뉴 패널을 화면 밖 창에 그려 ~/Library/Logs/GazeNotification/menu.png 로 저장 (레이아웃 확인용)
     static func snapshotMenu(model: AppModel) {
         let root = MenuView(model: model).background(Color(nsColor: .windowBackgroundColor))
         let hosting = NSHostingView(rootView: root)

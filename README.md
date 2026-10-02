@@ -1,6 +1,6 @@
 # GazeNotification
 
-메뉴 막대 앱 **GazeNoti** — 32:9 같은 초광폭 모니터에서 macOS 알림이 항상 오른쪽 위에 떠서 못 보는 문제를 해결하는 메뉴 막대 앱.
+메뉴 막대 앱 **GazeNotification** — 32:9 같은 초광폭 모니터에서 macOS 알림이 항상 오른쪽 위에 떠서 못 보는 문제를 해결하는 메뉴 막대 앱.
 웹캠으로 얼굴·눈 방향을 추적해 **지금 보고 있는 가로 위치**의 화면 상단으로 알림 배너를 옮긴다.
 
 ## 동작 방식
@@ -26,8 +26,8 @@
 
 | | 처음 버전 | 현재 |
 | --- | --- | --- |
-| GazeNoti (얼굴 있음) | 43.8% | 5.7~8.9% |
-| GazeNoti (자리 비움) | — | 약 3.4% |
+| GazeNotification (얼굴 있음) | 43.8% | 5.7~8.9% |
+| GazeNotification (자리 비움) | — | 약 3.4% |
 | UVCAssistant (카메라 드라이버) | 5.0% | 2.6% |
 | Vision 프레임당 CPU | — | 4.9ms (ANE 대기 포함 wall 20ms) |
 
@@ -52,7 +52,7 @@
 ```sh
 scripts/run.sh            # Debug 빌드 → 서명 → 실행
 scripts/run.sh Release    # 평소 사용
-open GazeNoti.xcodeproj   # Xcode 에서 ⌘R (팀 서명이 될 때)
+open GazeNotification.xcodeproj   # Xcode 에서 ⌘R (팀 서명이 될 때)
 ```
 
 `scripts/run.sh` 는 `DEVELOPER_DIR` 를 Xcode.app 으로 지정해서, `xcode-select` 가 CommandLineTools 를 가리켜도 빌드된다.
@@ -70,25 +70,25 @@ open GazeNoti.xcodeproj   # Xcode 에서 ⌘R (팀 서명이 될 때)
 권한이 꼬였을 때:
 
 ```sh
-tccutil reset Accessibility party.udon.GazeNoti
-tccutil reset Camera party.udon.GazeNoti
+tccutil reset Accessibility party.udon.GazeNotification
+tccutil reset Camera party.udon.GazeNotification
 ```
 
 ### 개발용 명령
 
-실행 중인 앱(Debug 빌드, 또는 `defaults write party.udon.GazeNoti debugCommands -bool YES` 인 Release)에 터미널에서:
+실행 중인 앱(Debug 빌드, 또는 `defaults write party.udon.GazeNotification debugCommands -bool YES` 인 Release)에 터미널에서:
 
 ```sh
-scripts/debug.sh test     # GazeNoti 이름으로 테스트 알림
-scripts/debug.sh dump     # NotificationCenter AX 트리 → ~/Library/Logs/GazeNoti/ax-dump.txt
+scripts/debug.sh test     # GazeNotification 이름으로 테스트 알림
+scripts/debug.sh dump     # NotificationCenter AX 트리 → ~/Library/Logs/GazeNotification/ax-dump.txt
 scripts/debug.sh status   # 시선·카메라·권한·단계별 처리 통계를 로그에 기록
-scripts/debug.sh snapshot # 메뉴 패널을 그려 ~/Library/Logs/GazeNoti/menu.png 로 저장
+scripts/debug.sh snapshot # 메뉴 패널을 그려 ~/Library/Logs/GazeNotification/menu.png 로 저장
 ```
 
 ## 처음 사용
 
 1. 실행하면 메뉴 막대에 👁 아이콘이 생긴다 (Dock 아이콘 없음).
-2. **손쉬운 사용** 권한 허용: 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용 → GazeNoti 켜기.
+2. **손쉬운 사용** 권한 허용: 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용 → GazeNotification 켜기.
 3. **카메라** 권한 허용.
 4. 메뉴에서 **시선 보정**: 화면 위쪽에 점 5개가 왼쪽부터 나온다. 평소처럼 바라보면 된다 (고개를 돌려도 됨). 약 15초.
 5. **테스트 알림**: 3초 뒤 알림이 온다. 그 사이 화면 왼쪽 등을 보고 있으면 그쪽에 떠야 한다.
@@ -114,21 +114,22 @@ scripts/debug.sh snapshot # 메뉴 패널을 그려 ~/Library/Logs/GazeNoti/menu
 | 위치 기준 | 시선 / 마우스 커서 (카메라 없이 쓰는 대안) |
 | 알림이 떠 있는 동안 계속 따라오기 | 끄면 처음 뜰 때만 옮긴다 |
 | 화면 상단에 알림 위치 표시 | 추정 시선 위치를 얇은 막대로 표시 (보정 확인용) |
-| 진단 → 알림 창 AX 구조 저장 | `~/Library/Logs/GazeNoti/ax-dump.txt` (알림 본문은 길이만 기록) |
+| 진단 → 알림 창 AX 구조 저장 | `~/Library/Logs/GazeNotification/ax-dump.txt` (알림 본문은 길이만 기록) |
 
-로그: `~/Library/Logs/GazeNoti/gazenoti.log`. 처음 잡힌 배너의 AX 구조는 `ax-dump-banner.txt` 에 저장된다.
+로그: `~/Library/Logs/GazeNotification/gazenotification.log`. 처음 잡힌 배너의 AX 구조는 `ax-dump-banner.txt` 에 저장된다.
 
 ## 코드 구조
 
 ```
-GazeNoti/
-  App/            GazeNotiApp (MenuBarExtra), AppModel (전체 연결·설정)
+GazeNotification/
+  App/            GazeNotificationApp (MenuBarExtra), AppModel (전체 연결·설정)
   Camera/         CameraService — 캡처 세션, 장치 선택, 포맷·장치 fps·처리 간격 조절
   Gaze/           FaceFeatureExtractor (Vision), GazeModel (기본식·ridge 보정·One Euro)
   Calibration/    전체 화면 보정 UI + 샘플 수집
   Notifications/  NotificationMover (사전 배치·창 서버 감시·원위치 복구), AXHelpers
   Overlay/        알림 위치 표시 막대
   UI/             메뉴 패널, AI 연산 상세(PipelineView), 카메라 미리보기
+  Assets.xcassets 앱 아이콘 (swift scripts/make-icon.swift 로 다시 그림)
 Config/           Info.plist, entitlements (샌드박스 끔 — 다른 앱 창을 옮기려면 필요)
 ```
 

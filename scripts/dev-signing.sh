@@ -12,8 +12,8 @@ cd "$(dirname "$0")/.."
 
 DIR=.signing
 KC="$PWD/$DIR/dev.keychain-db"
-KC_PASS="gazenoti-dev"
-NAME="GazeNoti Local Dev"
+KC_PASS="gazenotification-dev"
+NAME="GazeNotification Local Dev"
 
 if [[ -f "$KC" ]]; then
   echo "이미 있음: $KC"

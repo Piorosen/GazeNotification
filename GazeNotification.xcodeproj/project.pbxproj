@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		7A0000000000000000000001 /* GazeNoti.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GazeNoti.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A0000000000000000000001 /* GazeNotification.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GazeNotification.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		7A0000000000000000000002 /* GazeNoti */ = {
+		7A0000000000000000000002 /* GazeNotification */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = GazeNoti;
+			path = GazeNotification;
 			sourceTree = "<group>";
 		};
 		7A0000000000000000000010 /* Config */ = {
@@ -37,7 +37,7 @@
 		7A0000000000000000000004 = {
 			isa = PBXGroup;
 			children = (
-				7A0000000000000000000002 /* GazeNoti */,
+				7A0000000000000000000002 /* GazeNotification */,
 				7A0000000000000000000010 /* Config */,
 				7A0000000000000000000005 /* Products */,
 			);
@@ -46,7 +46,7 @@
 		7A0000000000000000000005 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7A0000000000000000000001 /* GazeNoti.app */,
+				7A0000000000000000000001 /* GazeNotification.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -54,9 +54,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		7A0000000000000000000006 /* GazeNoti */ = {
+		7A0000000000000000000006 /* GazeNotification */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 7A0000000000000000000007 /* Build configuration list for PBXNativeTarget "GazeNoti" */;
+			buildConfigurationList = 7A0000000000000000000007 /* Build configuration list for PBXNativeTarget "GazeNotification" */;
 			buildPhases = (
 				7A0000000000000000000008 /* Sources */,
 				7A0000000000000000000003 /* Frameworks */,
@@ -67,13 +67,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				7A0000000000000000000002 /* GazeNoti */,
+				7A0000000000000000000002 /* GazeNotification */,
 			);
-			name = GazeNoti;
+			name = GazeNotification;
 			packageProductDependencies = (
 			);
-			productName = GazeNoti;
-			productReference = 7A0000000000000000000001 /* GazeNoti.app */;
+			productName = GazeNotification;
+			productReference = 7A0000000000000000000001 /* GazeNotification.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -91,7 +91,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 7A000000000000000000000B /* Build configuration list for PBXProject "GazeNoti" */;
+			buildConfigurationList = 7A000000000000000000000B /* Build configuration list for PBXProject "GazeNotification" */;
 			developmentRegion = ko;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -105,7 +105,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				7A0000000000000000000006 /* GazeNoti */,
+				7A0000000000000000000006 /* GazeNotification */,
 			);
 		};
 /* End PBXProject section */
@@ -208,7 +208,8 @@
 		7A000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/GazeNoti.entitlements;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/GazeNotification.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -218,7 +219,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = GazeNoti;
+				INFOPLIST_KEY_CFBundleDisplayName = GazeNotification;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -226,7 +227,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = party.udon.GazeNoti;
+				PRODUCT_BUNDLE_IDENTIFIER = party.udon.GazeNotification;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -236,7 +237,8 @@
 		7A000000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/GazeNoti.entitlements;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/GazeNotification.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -246,7 +248,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = GazeNoti;
+				INFOPLIST_KEY_CFBundleDisplayName = GazeNotification;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -254,7 +256,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = party.udon.GazeNoti;
+				PRODUCT_BUNDLE_IDENTIFIER = party.udon.GazeNotification;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -264,7 +266,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		7A0000000000000000000007 /* Build configuration list for PBXNativeTarget "GazeNoti" */ = {
+		7A0000000000000000000007 /* Build configuration list for PBXNativeTarget "GazeNotification" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				7A000000000000000000000E /* Debug */,
@@ -273,7 +275,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		7A000000000000000000000B /* Build configuration list for PBXProject "GazeNoti" */ = {
+		7A000000000000000000000B /* Build configuration list for PBXProject "GazeNotification" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				7A000000000000000000000C /* Debug */,

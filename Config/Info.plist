@@ -5,7 +5,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>GazeNoti는 카메라로 얼굴과 눈의 방향을 추적해, 알림을 지금 보고 있는 화면 위치로 옮깁니다. 영상은 기기 밖으로 전송되거나 저장되지 않습니다.</string>
+	<string>GazeNotification은 카메라로 얼굴과 눈의 방향을 추적해, 알림을 지금 보고 있는 화면 위치로 옮깁니다. 영상은 기기 밖으로 전송되거나 저장되지 않습니다.</string>
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
 </dict>

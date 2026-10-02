@@ -194,7 +194,7 @@ struct PipelineView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("GazeNoti 전체 CPU \(percent(live.processCPUPercent)) (코어 1개 = 100%)")
+            Text("GazeNotification 전체 CPU \(percent(live.processCPUPercent)) (코어 1개 = 100%)")
                 .foregroundStyle(.secondary)
         }
     }

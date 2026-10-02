@@ -91,7 +91,7 @@ struct MenuView: View {
                 .font(.title2)
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 0) {
-                Text("GazeNoti").font(.headline)
+                Text("GazeNotification").font(.headline)
                 Text("알림을 보고 있는 곳으로").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -105,7 +105,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("손쉬운 사용 권한이 필요합니다", systemImage: "hand.raised.fill")
                 .font(.subheadline.weight(.semibold))
-            Text("알림 창을 옮기려면 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 GazeNoti 를 켜세요.")
+            Text("알림 창을 옮기려면 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 GazeNotification 을 켜세요.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

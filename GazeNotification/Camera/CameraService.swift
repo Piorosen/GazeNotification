@@ -37,8 +37,8 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         (extractor.detectionDevice, extractor.landmarksDevice)
     }
 
-    private let sessionQueue = DispatchQueue(label: "gazenoti.camera.session")
-    private let videoQueue = DispatchQueue(label: "gazenoti.camera.video", qos: .utility)
+    private let sessionQueue = DispatchQueue(label: "gazenotification.camera.session")
+    private let videoQueue = DispatchQueue(label: "gazenotification.camera.video", qos: .utility)
     private let output = AVCaptureVideoDataOutput()
     private let extractor = FaceFeatureExtractor()
     private var currentInput: AVCaptureDeviceInput?

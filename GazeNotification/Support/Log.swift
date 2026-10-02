@@ -1,19 +1,19 @@
 import Foundation
 import os
 
-/// os.Logger + ~/Library/Logs/GazeNoti/gazenoti.log 에 동시에 기록.
+/// os.Logger + ~/Library/Logs/GazeNotification/gazenotification.log 에 동시에 기록.
 /// 파일 로그는 권한/AX 구조 문제를 사후에 진단하기 위한 용도라 이벤트성 메시지만 남긴다.
 enum Log {
-    private static let logger = Logger(subsystem: "party.udon.GazeNoti", category: "app")
-    private static let queue = DispatchQueue(label: "gazenoti.log")
+    private static let logger = Logger(subsystem: "party.udon.GazeNotification", category: "app")
+    private static let queue = DispatchQueue(label: "gazenotification.log")
     private static let maxFileSize = 1_000_000
 
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/GazeNoti", isDirectory: true)
+            .appendingPathComponent("Library/Logs/GazeNotification", isDirectory: true)
     }
 
-    static var fileURL: URL { directory.appendingPathComponent("gazenoti.log") }
+    static var fileURL: URL { directory.appendingPathComponent("gazenotification.log") }
 
     static func info(_ message: String) {
         logger.info("\(message, privacy: .public)")
