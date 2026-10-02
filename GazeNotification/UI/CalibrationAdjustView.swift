@@ -34,10 +34,14 @@ struct CalibrationAdjustView: View {
 
     private var calibrationSection: some View {
         Section {
-            if let calibration = model.calibration {
-                Text(String(format: "학습한 보정: 평균 오차 %.1f%% · 샘플 %d개 · ", calibration.rmse * 100, calibration.sampleCount)
+            if let calibration = model.calibration, let estimator = model.activeEstimator {
+                Text(String(format: "%@ · %@ · 학습 오차 %.1f%%%@ · 샘플 %d개 · ", model.analysisMode.shortTitle,
+                            estimator.kind.title, estimator.trainingRMSE * 100,
+                            estimator.crossValidationRMSE.map { String(format: " · 교차검증 %.1f%%", $0 * 100) } ?? "",
+                            estimator.regression.sampleCount)
                      + calibration.createdAt.formatted(date: .abbreviated, time: .shortened))
-                if let results = calibration.targetResults, !results.isEmpty {
+                let results = estimator.targetResults
+                if !results.isEmpty {
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 2) {
                         GridRow {
                             Text("보정 점").foregroundStyle(.secondary)
@@ -50,6 +54,8 @@ struct CalibrationAdjustView: View {
                     }
                     .font(.caption)
                 }
+            } else if model.calibration != nil {
+                Text("지금 AI 모드(\(model.analysisMode.shortTitle) · \(model.activeEstimatorKind.title))로 학습한 보정이 없어 기본 추정식을 씁니다. 시선 보정을 다시 하면 모든 방식·모델을 학습합니다.")
             } else {
                 Text("아직 보정하지 않아 기본 추정식을 씁니다. 먼저 시선 보정을 하세요.")
             }

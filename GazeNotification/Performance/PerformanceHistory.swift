@@ -27,6 +27,7 @@ struct PerformanceSample: Identifiable, Equatable {
     var profile: PerformanceProfile
     /// CPU 상한 때문에 줄인 비율 (1 = 줄이지 않음)
     var governorScale: Double
+    var analysisMode: AnalysisMode
 }
 
 /// CPU 시간 측정

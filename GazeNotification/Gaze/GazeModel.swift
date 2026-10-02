@@ -1,17 +1,21 @@
 import Foundation
 
 /// 보정 전 기본 추정식. 카메라가 모니터 상단 중앙에 있고 사용자가 정면 ~70cm 에 앉았다고 가정한 대략값.
-/// 정확도는 낮으니 보정(`GazeCalibration`)을 권장.
+/// 정확도는 낮으니 보정(`CalibrationSet`)을 권장.
 enum DefaultGazeModel {
     /// (특징, 기울기, 기준값) — x = 0.5 + Σ 배율 · 기울기 · (값 − 기준값)
-    static let terms: [(GazeFeature, Double, Double)] = [
-        (.nose, -1.25, 0), (.pupil, -0.8, 0), (.faceX, -0.7, 0.5),
-    ]
+    static func terms(for mode: AnalysisMode) -> [(GazeFeature, Double, Double)] {
+        switch mode {
+        case .precise, .light: [(.nose, -1.25, 0), (.pupil, -0.8, 0), (.faceX, -0.7, 0.5)]
+        // 코 방향 ≈ yaw(라디안) / 2 관계에서 옮긴 값
+        case .headPose: [(.yaw, -0.6, 0), (.faceX, -0.7, 0.5)]
+        }
+    }
 
     /// - Parameter gains: 특징별 기여 배율 (`GazeAdjustment.featureGains`)
-    static func predict(_ vector: [Double], gains: [Double] = []) -> Double {
+    static func predict(_ vector: [Double], mode: AnalysisMode, gains: [Double] = []) -> Double {
         var x = 0.5
-        for (feature, slope, center) in terms {
+        for (feature, slope, center) in terms(for: mode) {
             let value = vector[feature.rawValue]
             guard value.isFinite else { continue }
             x += featureGain(gains, feature) * slope * (value - center)
@@ -19,8 +23,9 @@ enum DefaultGazeModel {
         return x
     }
 
-    static func breakdown(_ f: FaceFeatures, gains: [Double] = []) -> GazeBreakdown {
+    static func breakdown(_ f: FaceFeatures, mode: AnalysisMode, gains: [Double] = []) -> GazeBreakdown {
         let vector = f.vector
+        let terms = terms(for: mode)
         let rows = GazeFeature.allCases.map { feature -> GazeBreakdown.Term in
             let value = vector[feature.rawValue]
             guard let (_, slope, center) = terms.first(where: { $0.0 == feature }) else {
@@ -32,7 +37,7 @@ enum DefaultGazeModel {
         }
         return GazeBreakdown(modelName: "기본 추정식 (보정 전)",
                              formula: "x = 0.5 + Σ 기울기 × (값 − 기준)",
-                             intercept: 0.5, terms: rows, raw: predict(vector, gains: gains))
+                             intercept: 0.5, terms: rows, raw: predict(vector, mode: mode, gains: gains))
     }
 }
 
@@ -98,25 +103,35 @@ struct GazeBreakdown: Equatable {
         }
     }
 
-    let modelName: String
+    var modelName: String
     let formula: String
     let intercept: Double
     let terms: [Term]
     /// 모델 출력 (필터 전)
-    let raw: Double
+    var raw: Double
+    /// 점별 보간 전 회귀 출력 (점별 보간 모델일 때만)
+    var regressionOutput: Double?
     /// 좌우 이동·범위 조정 후 (필터 전)
     var adjusted: Double = 0
     /// One Euro 필터·구역 맞춤 후 최종값
     var filtered: Double = 0
 }
 
-struct CalibrationSample: Sendable {
-    var features: [Double]
+/// 보정 중 한 프레임: 분석 방식별 특징 벡터 (보정 중에는 모든 방식을 함께 계산한다)
+struct CalibrationSample: Sendable, Codable, Equatable {
+    var vectors: [AnalysisMode: [Double]]
     /// 사용자가 바라본 목표 지점 (화면 폭 기준 0...1)
     var target: Double
 }
 
-/// 보정 데이터로 학습한 선형(ridge) 회귀: 특징 벡터 → 화면 가로 위치(0...1).
+/// 회귀에 넣는 (특징, 목표) 한 줄
+struct RegressionRow: Sendable {
+    var features: [Double]
+    var target: Double
+}
+
+/// 보정 데이터로 학습한 ridge 회귀: 특징 벡터 → 화면 가로 위치(0...1).
+/// `expansion` 이 있으면 각 특징의 (값 − 중심)ⁿ 항을 더한 다항 회귀다.
 struct GazeCalibration: Codable, Equatable {
     var used: [Bool]
     var means: [Double]
@@ -129,6 +144,15 @@ struct GazeCalibration: Codable, Equatable {
     var createdAt: Date
     /// 보정 점마다 학습 결과가 그 점을 얼마나 맞히는지 (예전 버전에서 저장한 보정에는 없음)
     var targetResults: [TargetResult]?
+    /// 다항 회귀의 추가 항. nil = 선형
+    var expansion: Expansion?
+
+    /// 기본 특징마다 (값 − 중심)ⁿ 항을 `powers` 순서대로 덧붙인다
+    struct Expansion: Codable, Equatable {
+        /// 기본 특징별 중심 (보정 샘플 평균)
+        var centers: [Double]
+        var powers: [Int]
+    }
 
     struct TargetResult: Codable, Equatable {
         var target: Double
@@ -137,38 +161,78 @@ struct GazeCalibration: Codable, Equatable {
         var samples: Int
     }
 
+    /// 기본 특징 수 (다항이면 가중치는 그 배수)
+    private var baseCount: Int { expansion?.centers.count ?? weights.count }
+
+    /// 기본 특징 → 회귀 입력 (다항이면 거듭제곱 항을 뒤에 붙인다)
+    func expand(_ base: [Double]) -> [Double] {
+        guard let expansion else { return base }
+        var vector = base
+        for power in expansion.powers {
+            for j in expansion.centers.indices {
+                let d = (j < base.count ? base[j] : .nan) - expansion.centers[j]
+                vector.append(Foundation.pow(d, Double(power)))
+            }
+        }
+        return vector
+    }
+
     func breakdown(_ f: FaceFeatures, gains: [Double] = []) -> GazeBreakdown {
-        let vector = f.vector
+        let base = f.vector
+        let vector = expand(base)
+        let n = baseCount
         let rows = GazeFeature.allCases.map { feature -> GazeBreakdown.Term in
             let j = feature.rawValue
-            let value = vector[j]
             let g = featureGain(gains, feature)
-            guard j < weights.count, used[j] else {
-                return .init(feature: feature, value: value, slope: nil, gain: g, contribution: 0)
+            // 이 특징에서 나온 항: 선형 항 j, (다항이면) 거듭제곱 항 n·k + j
+            let indices = stride(from: j, to: weights.count, by: max(n, 1)).filter { used[$0] }
+            guard j < n, !indices.isEmpty else {
+                return .init(feature: feature, value: base[j], slope: nil, gain: g, contribution: 0)
             }
-            let filled = value.isFinite ? value : means[j]
-            return .init(feature: feature, value: value, slope: weights[j] / scales[j], gain: g,
-                         contribution: g * weights[j] * (filled - means[j]) / scales[j])
+            let contribution = indices.reduce(0.0) { sum, k in
+                let filled = vector[k].isFinite ? vector[k] : means[k]
+                return sum + g * weights[k] * (filled - means[k]) / scales[k]
+            }
+            let slope = used[j] ? weights[j] / scales[j] : 0
+            return .init(feature: feature, value: base[j], slope: slope, gain: g, contribution: contribution)
         }
-        return GazeBreakdown(modelName: String(format: "보정 모델 (ridge 회귀, 학습 오차 %.1f%%)", rmse * 100),
-                             formula: "x = 평균 + Σ 기울기 × (값 − 보정 때 평균)",
-                             intercept: intercept, terms: rows, raw: predict(vector, gains: gains))
+        let name = expansion == nil ? "선형 회귀" : "곡선 회귀"
+        return GazeBreakdown(modelName: String(format: "%@ (ridge, 학습 오차 %.1f%%)", name, rmse * 100),
+                             formula: "x = 평균 + Σ 기울기 × (값 − 보정 때 평균)"
+                                + (expansion == nil ? "" : " + 거듭제곱 항"),
+                             intercept: intercept, terms: rows, raw: predict(base, gains: gains))
     }
 
     /// - Parameter gains: 특징별 기여 배율 (`GazeAdjustment.featureGains`)
     func predict(_ features: [Double], gains: [Double] = []) -> Double {
+        let vector = expand(features)
+        let n = baseCount
         var y = intercept
-        for j in weights.indices where j < features.count && used[j] {
-            let value = features[j].isFinite ? features[j] : means[j]
-            let g = GazeFeature(rawValue: j).map { featureGain(gains, $0) } ?? 1
+        for j in weights.indices where j < vector.count && used[j] {
+            let value = vector[j].isFinite ? vector[j] : means[j]
+            let g = GazeFeature(rawValue: j % max(n, 1)).map { featureGain(gains, $0) } ?? 1
             y += g * weights[j] * (value - means[j]) / scales[j]
         }
         return y
     }
 
     /// - Parameter ridge: 표준화된 특징 공간에서의 L2 규제 강도 (샘플 수에 비례해 적용)
-    static func fit(_ samples: [CalibrationSample], ridge: Double = 0.02, minSamples: Int = 30) -> GazeCalibration? {
-        guard let dimension = samples.first?.features.count, dimension > 0, samples.count >= minSamples else { return nil }
+    /// - Parameter powers: 덧붙일 거듭제곱 (빈 배열 = 선형). 예: [3] = 세제곱 항
+    static func fit(_ baseRows: [RegressionRow], powers: [Int] = [], ridge: Double = 0.02,
+                    minSamples: Int = 30) -> GazeCalibration? {
+        guard let baseDimension = baseRows.first?.features.count, baseDimension > 0, baseRows.count >= minSamples else { return nil }
+        var expansion: Expansion?
+        if !powers.isEmpty {
+            let centers = (0..<baseDimension).map { j in
+                let column = baseRows.map { $0.features[j] }.filter(\.isFinite)
+                return column.isEmpty ? 0 : column.reduce(0, +) / Double(column.count)
+            }
+            expansion = Expansion(centers: centers, powers: powers)
+        }
+        let expander = GazeCalibration(used: [], means: [], scales: [], weights: [], intercept: 0, rmse: 0,
+                                       sampleCount: 0, createdAt: Date(), expansion: expansion)
+        let samples = baseRows.map { RegressionRow(features: expander.expand($0.features), target: $0.target) }
+        let dimension = samples[0].features.count
 
         // 80% 이상 값이 있는 특징만 사용하고, 사용하는 특징이 모두 있는 행만 남긴다.
         var used = (0..<dimension).map { j in
@@ -210,16 +274,20 @@ struct GazeCalibration: Codable, Equatable {
         for (p, j) in active.enumerated() { weights[j] = solution[p] }
 
         var model = GazeCalibration(used: used, means: means, scales: scales, weights: weights,
-                                    intercept: yMean, rmse: 0, sampleCount: rows.count, createdAt: Date())
+                                    intercept: yMean, rmse: 0, sampleCount: rows.count, createdAt: Date(),
+                                    expansion: expansion)
+        // rows 는 확장된 특징이므로 예측은 확장 전 기본 특징으로
+        let baseCount = baseDimension
+        func base(_ row: RegressionRow) -> [Double] { Array(row.features.prefix(baseCount)) }
         let squaredError = rows.reduce(0) { acc, row in
-            let e = model.predict(row.features) - row.target
+            let e = model.predict(base(row)) - row.target
             return acc + e * e
         }
         model.rmse = (squaredError / n).squareRoot()
         model.targetResults = Dictionary(grouping: rows, by: \.target)
             .map { target, group in
                 TargetResult(target: target,
-                             predicted: group.reduce(0) { $0 + model.predict($1.features) } / Double(group.count),
+                             predicted: group.reduce(0) { $0 + model.predict(base($1)) } / Double(group.count),
                              samples: group.count)
             }
             .sorted { $0.target < $1.target }

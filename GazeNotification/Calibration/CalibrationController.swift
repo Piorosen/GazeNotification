@@ -102,10 +102,11 @@ final class CalibrationController {
     }
 
     /// 카메라 프레임마다 호출된다 (얼굴이 없으면 nil).
-    func ingest(_ features: FaceFeatures?) {
+    /// - Parameter mode: 지금 분석 방식 (모든 방식을 함께 계산하지 않은 프레임은 이 방식 값만 저장)
+    func ingest(_ features: FaceFeatures?, mode: AnalysisMode) {
         state?.faceDetected = features != nil
         guard let features, let target = collectingTarget else { return }
-        samples.append(CalibrationSample(features: features.vector, target: target))
+        samples.append(CalibrationSample(vectors: features.modeVectors ?? [mode: features.vector], target: target))
     }
 
     func cancel() { finish(with: nil) }

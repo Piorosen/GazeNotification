@@ -10,12 +10,14 @@ struct FaceFeatures: Sendable {
     var faceX: Double
     /// 얼굴 bounding box 폭 (0...1). 카메라와의 거리 추정용.
     var faceWidth: Double
-    /// (코끝.x − 두 눈 중점.x) / 눈 사이 거리 — 머리 좌우 회전(yaw) 근사치
+    /// (코끝.x − 두 눈 중점.x) / 눈 사이 거리 — 머리 좌우 회전(yaw) 근사치. 머리 방향 방식에서는 NaN
     var noseOffset: Double
     /// 양쪽 (동공.x − 눈 중심.x) / 눈 폭 의 평균. 눈을 감았거나 검출 실패면 nil
     var pupilOffset: Double?
     /// Vision 이 추정한 yaw (라디안). 없으면 nil
     var yaw: Double?
+    /// 보정 중에만: 같은 프레임에서 계산한 분석 방식별 특징 벡터
+    var modeVectors: [AnalysisMode: [Double]]?
 
     static let featureNames = ["nose", "pupil", "faceX", "yaw"]
 

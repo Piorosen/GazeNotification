@@ -4,9 +4,11 @@
 #   scripts/debug.sh dump    NotificationCenter AX 트리 → ~/Library/Logs/GazeNotification/ax-dump.txt
 #   scripts/debug.sh status  현재 시선/카메라/권한 상태를 로그에 기록
 #   scripts/debug.sh snapshot              메뉴 패널을 그려 menu.png 로 저장
-#   scripts/debug.sh settings-performance  설정 창(성능 그래프)을 열어 settings-performance.png 로 저장 (limits, calibration 도 같음)
+#   scripts/debug.sh settings-performance  설정 창 탭을 그려 settings-performance.png 로 저장 (limits, ai, calibration 도 같음)
+#   scripts/debug.sh mode-precise          AI 모드 얼굴 분석 방식 바꾸기 (precise, light, headPose)
+#   scripts/debug.sh device-gpu            Vision 연산 장치 바꾸기 (automatic, neuralEngine, gpu, cpu)
 set -euo pipefail
-CMD="${1:?usage: debug.sh test|dump|status|snapshot|settings-performance|settings-limits|settings-calibration}"
+CMD="${1:?usage: debug.sh test|dump|status|snapshot|settings-<탭>|mode-<방식>|device-<장치>}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 swift - <<EOF
 import Foundation

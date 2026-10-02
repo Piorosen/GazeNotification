@@ -35,10 +35,8 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     /// 카메라 포맷이 적용될 때 (메인 스레드)
     var onFormat: (@MainActor (CameraFormatInfo) -> Void)?
 
-    /// Vision 요청이 실행되는 장치
-    var visionDevices: (detection: String, landmarks: String) {
-        (extractor.detectionDevice, extractor.landmarksDevice)
-    }
+    /// Vision 요청에 실제로 지정된 장치가 바뀔 때 (메인 스레드)
+    var onVisionDevices: (@MainActor (VisionDevices) -> Void)?
 
     private let sessionQueue = DispatchQueue(label: "gazenotification.camera.session")
     private let videoQueue = DispatchQueue(label: "gazenotification.camera.video", qos: .utility)
@@ -156,6 +154,25 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             watchdogFixes = 0
             videoQueue.async { self.expectedFPS = 0; self.watchdogFixesSnapshot = 0 }
             report(.idle)
+        }
+    }
+
+    /// 얼굴 분석 방식과, 보정 중이면 모든 방식의 특징을 함께 계산할지
+    func setAnalysis(mode: AnalysisMode, computeAllModes: Bool) {
+        videoQueue.async { [self] in
+            extractor.mode = mode
+            extractor.computeAllModes = computeAllModes
+        }
+    }
+
+    /// Vision 신경망을 돌릴 장치
+    func setComputePreference(_ preference: ComputePreference) {
+        videoQueue.async { [self] in
+            extractor.setComputePreference(preference)
+            let devices = extractor.devices
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.onVisionDevices?(devices) }
+            }
         }
     }
 
@@ -353,7 +370,9 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         var snapshot = statsWindow.snapshot(elapsed: elapsed)
         snapshot.targetHz = targetHz
         snapshot.deviceFPS = expectedFPS
-        snapshot.detectionInterval = extractor.detectionInterval
+        snapshot.detectionInterval = extractor.mode == .headPose ? 1 : extractor.detectionInterval
+        snapshot.mode = extractor.mode
+        snapshot.devices = extractor.devices
         statsWindow = StatsWindow(start: now)
         checkFrameRate(received: snapshot.receivedFPS, now: now)
         DispatchQueue.main.async { [weak self] in
@@ -404,6 +423,8 @@ struct PipelineSnapshot: Equatable, Sendable {
     /// 장치에 설정한 fps
     var deviceFPS: Double = 0
     var detectionInterval = 1
+    var mode: AnalysisMode = .precise
+    var devices = VisionDevices()
     var detectWallMs: Double = 0
     var detectCPUms: Double = 0
     var landmarksWallMs: Double = 0
@@ -412,6 +433,14 @@ struct PipelineSnapshot: Equatable, Sendable {
 
     /// 초당 신경망 추론 횟수 (얼굴 검출 + 랜드마크)
     var inferencesPerSecond: Double { detectFPS + landmarksFPS }
+    /// 처리 1회당 평균 CPU (ms, 검출·랜드마크·특징 합)
+    var cpuPerFrameMs: Double {
+        processedFPS > 0 ? cpuPercent * 10 / processedFPS : 0
+    }
+    /// 처리 1회당 평균 경과 시간 (ms)
+    var wallPerFrameMs: Double {
+        processedFPS > 0 ? (detectFPS * detectWallMs + landmarksFPS * landmarksWallMs) / processedFPS : 0
+    }
     /// 이 파이프라인이 쓰는 CPU (코어 1개 = 100%)
     var cpuPercent: Double {
         (detectFPS * detectCPUms + landmarksFPS * landmarksCPUms + featuresFPS * featuresCPUms) / 10

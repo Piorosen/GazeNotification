@@ -73,18 +73,23 @@ struct PipelineView: View {
                          format.map { "\($0.width)×\($0.height) \($0.sourceFormat == "yuvs" ? "비압축" : $0.sourceFormat) → \($0.outputFormat)" } ?? "—",
                          detail: "UVC 드라이버가 프레임 전달 (디코딩 없음)",
                          rate: p.receivedFPS, time: nil)
-                stageRow("② 얼굴 검출", "VNDetectFaceRectangles · \(deviceLabel(devices.detection))",
+                stageRow("② 얼굴 검출", "VNDetectFaceRectangles · \(devices.detection)",
                          detail: p.detectionInterval <= 1 ? "이미지 전체 → 얼굴 상자 + 머리 방향(yaw)"
                              : "\(p.detectionInterval)번에 1번 · 그 사이는 직전 얼굴 상자를 눈에 맞춰 옮김",
                          rate: p.detectFPS, time: (p.detectWallMs, p.detectCPUms))
-                stageRow("③ 랜드마크", "VNDetectFaceLandmarks 76점 · \(deviceLabel(devices.landmarks))",
-                         detail: "얼굴 상자 안 → 눈·동공·코 등 76개 점",
-                         rate: p.landmarksFPS, time: (p.landmarksWallMs, p.landmarksCPUms))
+                if let landmarksDevice = devices.landmarks(for: model.analysisMode) {
+                    stageRow("③ 랜드마크", "VNDetectFaceLandmarks \(model.analysisMode == .light ? 65 : 76)점 · \(landmarksDevice)",
+                             detail: "얼굴 상자 안 → 눈·동공·코 등 점 좌표",
+                             rate: p.landmarksFPS, time: (p.landmarksWallMs, p.landmarksCPUms))
+                } else {
+                    stageRow("③ 랜드마크", "사용 안 함 (머리 방향 방식)", detail: "얼굴 상자와 yaw 만 사용",
+                             rate: 0, time: nil)
+                }
                 stageRow("④ 특징 계산", "기하 계산 · CPU",
                          detail: "점 좌표 → 코 방향·동공 위치·얼굴 위치",
                          rate: p.featuresFPS, time: (p.featuresCPUms, p.featuresCPUms))
-                stageRow("⑤ 시선 회귀", "선형 회귀 · CPU",
-                         detail: "특징 4개 → 화면 가로 위치 x",
+                stageRow("⑤ 시선 추정", "\(model.activeEstimatorKind.title) · CPU",
+                         detail: "특징 \(model.analysisMode.features.count)개 → 화면 가로 위치 x",
                          rate: p.featuresFPS, time: nil)
                 stageRow("⑥ 스무딩", "One Euro 필터 · CPU",
                          detail: "느리게 움직이면 강하게, 빠르면 약하게 평활",
@@ -142,9 +147,11 @@ struct PipelineView: View {
                     }
                 }
                 let sum = b.terms.reduce(0) { $0 + $1.contribution }
+                let interpolated = b.regressionOutput == nil ? "" : String(format: "  →  점별 보간 %.1f%%", b.raw * 100)
+                let regression = b.regressionOutput ?? b.raw
                 let adjustedText = abs(b.adjusted - b.raw) > 0.0005 ? String(format: "  →  수동 조정 %.1f%%", b.adjusted * 100) : ""
-                Text(String(format: "%.1f%% %@ %.1f%% = %.1f%%", b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, b.raw * 100)
-                     + adjustedText + String(format: "  →  필터 후 %.1f%%", b.filtered * 100))
+                Text(String(format: "%.1f%% %@ %.1f%% = %.1f%%", b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, regression * 100)
+                     + interpolated + adjustedText + String(format: "  →  필터 후 %.1f%%", b.filtered * 100))
                     .fontWeight(.medium)
                 let moverWidth = model.liveStats.mover?.screenWidth ?? 0
                 let width = moverWidth > 0 ? moverWidth : Double(NSScreen.main?.frame.width ?? 0)
@@ -230,18 +237,6 @@ struct PipelineView: View {
                 return "\(rate.title) \(Int((value * 100).rounded()))%"
             }
             .joined(separator: " · ")
-    }
-
-    /// "VNComputeStageMain:ANE,VNComputeStagePostProcessing:CPU" → "ANE (후처리 CPU)"
-    private func deviceLabel(_ raw: String) -> String {
-        var main = "?"
-        var post: String?
-        for part in raw.split(separator: ",") {
-            let pieces = part.split(separator: ":")
-            guard pieces.count == 2 else { continue }
-            if pieces[0].hasSuffix("Main") { main = String(pieces[1]) } else { post = String(pieces[1]) }
-        }
-        return post.map { "\(main) (후처리 \($0))" } ?? main
     }
 
     private func rateColor(_ rate: TrackingRate) -> Color {

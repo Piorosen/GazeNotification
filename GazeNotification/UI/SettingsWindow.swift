@@ -63,6 +63,9 @@ struct SettingsView: View {
             LimitsView(model: model)
                 .tabItem { Label(SettingsTab.limits.title, systemImage: SettingsTab.limits.symbol) }
                 .tag(SettingsTab.limits)
+            AIModeView(model: model)
+                .tabItem { Label(SettingsTab.ai.title, systemImage: SettingsTab.ai.symbol) }
+                .tag(SettingsTab.ai)
             CalibrationAdjustView(model: model)
                 .tabItem { Label(SettingsTab.calibration.title, systemImage: SettingsTab.calibration.symbol) }
                 .tag(SettingsTab.calibration)

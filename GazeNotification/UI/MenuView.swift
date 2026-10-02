@@ -147,6 +147,11 @@ struct MenuView: View {
                       value: model.accessibilityGranted ? "허용됨" : "필요",
                       color: model.accessibilityGranted ? .green : .red)
             StatusRow(title: "연산", value: policyText, color: model.cameraPause == nil ? .green : .secondary)
+            if model.placementSource == .gaze {
+                StatusRow(title: "AI 모드",
+                          value: "\(model.analysisMode.shortTitle) · \(model.activeEstimatorKind.title) · \(model.visionDevices.detection)",
+                          color: .green)
+            }
 
             if model.placementSource == .gaze {
                 DisclosureGroup("카메라 미리보기 (펼치면 \(Int(TrackingRate.liveHz))회/s)", isExpanded: $showPreview) {
@@ -241,7 +246,10 @@ struct MenuView: View {
     private var calibrationText: String {
         guard let calibration = model.calibration else { return "안 함 (기본 추정식 사용 · 보정 권장)" }
         let date = calibration.createdAt.formatted(date: .abbreviated, time: .shortened)
-        return String(format: "완료 · 오차 %.1f%% · ", calibration.rmse * 100) + date
+        guard let estimator = model.activeEstimator else {
+            return "\(model.analysisMode.shortTitle) 방식은 학습 안 됨 (다시 보정) · " + date
+        }
+        return String(format: "완료 · 오차 %.1f%% · ", (estimator.crossValidationRMSE ?? estimator.trainingRMSE) * 100) + date
     }
 }
 

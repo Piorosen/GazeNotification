@@ -19,13 +19,14 @@ enum PlacementSource: String, CaseIterable, Identifiable {
 
 /// 설정 창의 탭
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case performance, limits, calibration
+    case performance, limits, ai, calibration
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .performance: "성능 그래프"
         case .limits: "연산 제한"
+        case .ai: "AI 모드"
         case .calibration: "보정 조정"
         }
     }
@@ -33,6 +34,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .performance: "chart.xyaxis.line"
         case .limits: "gauge.with.dots.needle.33percent"
+        case .ai: "brain"
         case .calibration: "scope"
         }
     }
@@ -63,7 +65,12 @@ final class AppModel {
         static let overlay = "showOverlay"
         static let source = "placementSource"
         static let camera = "cameraID"
-        static let calibration = "calibration.v1"
+        /// 예전 버전의 보정 (분석 방식 하나·선형 모델 하나). 읽기만 해서 옮긴다
+        static let legacyCalibration = "calibration.v1"
+        static let calibration = "calibration.v2"
+        static let analysisMode = "ai.analysisMode"
+        static let estimator = "ai.estimator"
+        static let computeDevice = "ai.computeDevice"
         static let profile = "performance.profile"
         static let customLimits = "performance.customLimits"
         static let adjustment = "gaze.adjustment"
@@ -143,6 +150,36 @@ final class AppModel {
     /// 전체 시선 보정에서 점 하나를 보는 시간(초)
     var calibrationSeconds: Double {
         didSet { defaults.set(calibrationSeconds, forKey: Keys.calibrationSeconds) }
+    }
+
+    /// 얼굴 분석 방식 (AI 모드)
+    var analysisMode: AnalysisMode {
+        didSet {
+            guard analysisMode != oldValue else { return }
+            defaults.set(analysisMode.rawValue, forKey: Keys.analysisMode)
+            Log.info("얼굴 분석 방식: \(analysisMode.title)")
+            camera.setAnalysis(mode: analysisMode, computeAllModes: isCalibrating)
+            resetTracking()
+        }
+    }
+
+    /// 시선 추정 모델 (AI 모드)
+    var estimatorChoice: EstimatorChoice {
+        didSet {
+            guard estimatorChoice != oldValue else { return }
+            defaults.set(estimatorChoice.rawValue, forKey: Keys.estimator)
+            Log.info("시선 추정 모델: \(estimatorChoice.title) → \(activeEstimatorKind.title)")
+            resetTracking()
+        }
+    }
+
+    /// Vision 신경망을 돌릴 장치 (AI 모드)
+    var computePreference: ComputePreference {
+        didSet {
+            guard computePreference != oldValue else { return }
+            defaults.set(computePreference.rawValue, forKey: Keys.computeDevice)
+            camera.setComputePreference(computePreference)
+        }
     }
 
     /// 보정 조정 탭을 보는 동안 화면 상단에 위치 막대를 띄울지
@@ -231,9 +268,13 @@ final class AppModel {
     /// 알림 창이 화면에 떠 있는지
     private(set) var notificationVisible = false
 
-    var visionDevices: (detection: String, landmarks: String) { camera.visionDevices }
+    /// Vision 요청에 실제로 지정된 장치
+    private(set) var visionDevices = VisionDevices()
+    /// 분석 방식·장치별로 최근에 측정한 처리 1회당 비용 (AI 모드 비교용)
+    private(set) var modeCosts: [ModeCostKey: ModeCost] = [:]
     private(set) var accessibilityGranted = Permissions.accessibilityTrusted
-    private(set) var calibration: GazeCalibration?
+    /// 마지막 보정으로 학습한 모든 모델
+    private(set) var calibration: CalibrationSet?
     private(set) var isCalibrating = false
     private(set) var lastEvent: String?
     private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -255,6 +296,19 @@ final class AppModel {
 
     /// 보정 조정 탭이 화면에 보이는지 (실시간 속도·위치 막대)
     var isAdjusting: Bool { isSettingsVisible && settingsTab == .calibration }
+
+    /// 지금 실제로 쓰는 추정 모델 종류 (자동이면 교차검증 오차가 가장 작은 것, 고른 모델이 없으면 기본 추정식)
+    var activeEstimatorKind: EstimatorKind {
+        if let kind = estimatorChoice.kind {
+            return kind == .formula || calibration?.estimator(analysisMode, kind) != nil ? kind : .formula
+        }
+        return calibration?.bestKind(for: analysisMode) ?? .formula
+    }
+
+    /// 지금 쓰는 학습 모델 (기본 추정식이면 nil)
+    var activeEstimator: GazeEstimator? {
+        calibration?.estimator(analysisMode, activeEstimatorKind)
+    }
 
     // MARK: 내부
 
@@ -282,6 +336,7 @@ final class AppModel {
     @ObservationIgnored private var previousSample: CPUSample?
     @ObservationIgnored private let mainThreadPort = CPUClock.currentThreadPort()
     @ObservationIgnored private var trackingCPUAverage: Double?
+    @ObservationIgnored private var latestModeCosts: [ModeCostKey: ModeCost] = [:]
     @ObservationIgnored private var appliedHz: Double = 0
     @ObservationIgnored private var appliedDetectionInterval = 0
     @ObservationIgnored private let launchTime = CACurrentMediaTime()
@@ -325,7 +380,11 @@ final class AppModel {
         showOverlay = defaults.bool(forKey: Keys.overlay)
         placementSource = PlacementSource(rawValue: defaults.string(forKey: Keys.source) ?? "") ?? .gaze
         selectedCameraID = defaults.string(forKey: Keys.camera)
-        calibration = Self.load(GazeCalibration.self, Keys.calibration, from: defaults)
+        calibration = Self.load(CalibrationSet.self, Keys.calibration, from: defaults)
+            ?? Self.load(GazeCalibration.self, Keys.legacyCalibration, from: defaults).map(CalibrationSet.migrated)
+        analysisMode = AnalysisMode(rawValue: defaults.string(forKey: Keys.analysisMode) ?? "") ?? .precise
+        estimatorChoice = EstimatorChoice(rawValue: defaults.string(forKey: Keys.estimator) ?? "") ?? .automatic
+        computePreference = ComputePreference(rawValue: defaults.string(forKey: Keys.computeDevice) ?? "") ?? .automatic
         let profile = PerformanceProfile(rawValue: defaults.string(forKey: Keys.profile) ?? "") ?? .automatic
         let custom = (Self.load(PerformanceLimits.self, Keys.customLimits, from: defaults) ?? .balanced).sanitized
         self.profile = profile
@@ -342,12 +401,16 @@ final class AppModel {
         camera.onFeatures = { [weak self] features in self?.handle(features) }
         camera.onStatus = { [weak self] status in self?.cameraStatus = status }
         camera.onFormat = { [weak self] info in self?.cameraFormat = info }
+        camera.onVisionDevices = { [weak self] devices in self?.visionDevices = devices }
         camera.onStats = { [weak self] snapshot in
             guard let self else { return }
             self.latestPipeline = snapshot
             self.latestPipelineTime = CACurrentMediaTime()
+            self.recordModeCost(snapshot)
             if self.publishesLiveValues { self.pipeline = snapshot }
         }
+        camera.setAnalysis(mode: analysisMode, computeAllModes: false)
+        camera.setComputePreference(computePreference)
         mover.targetProvider = { [weak self] in self?.placementTarget() }
         mover.followWhileVisible = followWhileVisible
         mover.onMove = { [weak self] message in
@@ -382,22 +445,38 @@ final class AppModel {
             targets: CalibrationPlan.evenTargets(count),
             collectDuration: .milliseconds(Int(calibrationSeconds * 1000))
         ) { [weak self] samples in
-            guard let model = GazeCalibration.fit(samples) else {
+            guard let self else { return .failure(CalibrationFailure(message: "취소됨")) }
+            let targets = CalibrationPlan.evenTargets(count)
+            let set = CalibrationSet.fit(samples: samples, targets: targets)
+            for mode in AnalysisMode.allCases {
+                let summary = EstimatorKind.allCases.compactMap { kind -> String? in
+                    guard let model = set.estimator(mode, kind) else { return nil }
+                    return String(format: "%@ 학습 %.1f%% 교차 %@", kind.rawValue, model.trainingRMSE * 100,
+                                  model.crossValidationRMSE.map { String(format: "%.1f%%", $0 * 100) } ?? "-")
+                }
+                Log.info("보정 \(mode.rawValue): " + (summary.isEmpty ? "학습 불가" : summary.joined(separator: " · "))
+                    + (set.formulaRMSE[mode].map { String(format: " · 기본식 %.1f%%", $0 * 100) } ?? ""))
+            }
+            let mode = self.analysisMode
+            let kind = self.estimatorChoice.kind.flatMap { set.estimator(mode, $0) != nil ? $0 : nil } ?? set.bestKind(for: mode)
+            guard let kind, let model = set.estimator(mode, kind) else {
                 return .failure(CalibrationFailure(message: "학습에 실패했습니다. 고개와 눈을 조금 더 움직여 점을 바라보세요."))
             }
-            Log.info("보정 완료 rmse=\(model.rmse) weights=\(model.weights) used=\(model.used)")
-            return .success(CalibrationOutcome(message: String(format: "평균 오차 약 %.1f%% (화면 폭 기준)", model.rmse * 100)) {
-                self?.applyCalibration(model)
+            let message = String(format: "%@ · %@ · 평균 오차 약 %.1f%%", mode.shortTitle, kind.title,
+                                 (model.crossValidationRMSE ?? model.trainingRMSE) * 100)
+            return .success(CalibrationOutcome(message: message) { [weak self] in
+                self?.applyCalibration(set)
             })
         }
-        runCalibration(plan)
+        runCalibration(plan, computeAllModes: true)
     }
 
     /// 학습한 보정은 그대로 두고, 왼쪽 끝·가운데·오른쪽 끝 세 점으로 좌우 이동과 범위만 맞춘다
     func startQuickAdjust() {
         let targets = [0.04, 0.5, 0.96]
         let gains = adjustment.featureGains
-        let model = calibration
+        let model = activeEstimator
+        let mode = analysisMode
         let plan = CalibrationPlan(
             title: "빠른 위치 맞춤",
             intro: "점 3개(왼쪽 끝 · 가운데 · 오른쪽 끝)를 차례로 바라보세요.\n학습한 보정은 그대로 두고 좌우 이동과 범위만 다시 맞춥니다.",
@@ -406,7 +485,8 @@ final class AppModel {
         ) { [weak self] samples in
             func meanRaw(_ target: Double) -> Double? {
                 let raws = samples.filter { $0.target == target }
-                    .map { model?.predict($0.features, gains: gains) ?? DefaultGazeModel.predict($0.features, gains: gains) }
+                    .compactMap { $0.vectors[mode] }
+                    .map { model?.predict($0, gains: gains) ?? DefaultGazeModel.predict($0, mode: mode, gains: gains) }
                 return raws.isEmpty ? nil : raws.reduce(0, +) / Double(raws.count)
             }
             guard let left = meanRaw(targets[0]), let center = meanRaw(targets[1]), let right = meanRaw(targets[2]) else {
@@ -432,9 +512,11 @@ final class AppModel {
         runCalibration(plan)
     }
 
-    private func runCalibration(_ plan: CalibrationPlan) {
+    /// - Parameter computeAllModes: 모든 분석 방식의 특징을 함께 모은다 (전체 보정)
+    private func runCalibration(_ plan: CalibrationPlan, computeAllModes: Bool = false) {
         guard !isCalibrating, isEnabled, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         isCalibrating = true
+        camera.setAnalysis(mode: analysisMode, computeAllModes: computeAllModes)
         applyRunState()
         updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
         overlay.setVisible(false)
@@ -442,6 +524,7 @@ final class AppModel {
         calibrator.begin(on: screen, plan: plan) { [weak self] outcome in
             guard let self else { return }
             self.isCalibrating = false
+            self.camera.setAnalysis(mode: self.analysisMode, computeAllModes: false)
             if let outcome {
                 outcome.apply()
                 self.lastEvent = "\(plan.title) 완료 · \(outcome.message)"
@@ -453,9 +536,9 @@ final class AppModel {
         }
     }
 
-    private func applyCalibration(_ model: GazeCalibration) {
-        calibration = model
-        save(model, Keys.calibration)
+    private func applyCalibration(_ set: CalibrationSet) {
+        calibration = set
+        save(set, Keys.calibration)
         // 이전 보정에 맞춰 손본 좌우 이동·범위는 새 보정에는 맞지 않는다
         if !adjustment.isPositionDefault { adjustment = adjustment.resettingPosition() }
     }
@@ -463,6 +546,7 @@ final class AppModel {
     func resetCalibration() {
         calibration = nil
         defaults.removeObject(forKey: Keys.calibration)
+        defaults.removeObject(forKey: Keys.legacyCalibration)
         filter.reset()
         lastEvent = "보정 초기화 — 기본 추정식 사용"
     }
@@ -556,6 +640,7 @@ final class AppModel {
         Log.info("STATUS enabled=\(isEnabled) source=\(placementSource.rawValue) camera=\(cameraStatus) pause=\(cameraPause.map { "\($0)" } ?? "none") "
             + "profile=\(policy.applied.rawValue)(\(policy.reason ?? "-")) governor=\(String(format: "%.2f", governorScale)) "
             + "face=\(faceDetected) gazeX=\(gaze) fps=\(String(format: "%.1f", measuredFPS)) rate=\(trackingRate) menu=\(isMenuVisible) settings=\(isSettingsVisible) ax=\(accessibilityGranted) "
+            + "ai=\(analysisMode.rawValue)/\(activeEstimatorKind.rawValue)/\(visionDevices.detection) "
             + "calibrated=\(calibration != nil) mover=\(mover.isRunning) features[\(features)]")
     }
 
@@ -617,7 +702,7 @@ final class AppModel {
     private func handle(_ features: FaceFeatures?) {
         countFrame()
         processedFrames += 1
-        calibrator.ingest(features)
+        calibrator.ingest(features, mode: analysisMode)
 
         guard var features else {
             let now = CACurrentMediaTime()
@@ -637,7 +722,9 @@ final class AppModel {
 
         // 모델 출력 → 손으로 맞춘 이동·범위 → 스무딩 → 구역 맞춤
         let gains = adjustment.featureGains
-        let raw = calibration?.predict(features.vector, gains: gains) ?? DefaultGazeModel.predict(features.vector, gains: gains)
+        let estimator = activeEstimator
+        let raw = estimator?.predict(features.vector, gains: gains)
+            ?? DefaultGazeModel.predict(features.vector, mode: analysisMode, gains: gains)
         let adjusted = adjustment.mapPosition(raw)
         let smoothed = filter.filter(adjusted.clamped(to: -0.1...1.1), timestamp: features.timestamp)
         var gaze = smoothed.clamped(to: 0...1)
@@ -647,13 +734,34 @@ final class AppModel {
         if publishesLiveValues {
             gazeX = latestGaze
             rawGazeX = latestRawGaze
-            var breakdown = calibration?.breakdown(features, gains: gains) ?? DefaultGazeModel.breakdown(features, gains: gains)
+            var breakdown = estimator?.breakdown(features, gains: gains)
+                ?? DefaultGazeModel.breakdown(features, mode: analysisMode, gains: gains)
             breakdown.adjusted = adjusted
             breakdown.filtered = gaze
             gazeBreakdown = breakdown
         }
         overlay.update(normalizedX: latestGaze, faceDetected: true)
         updateTrackingRate(faceFound: true, now: features.timestamp)
+    }
+
+    /// 모델·방식이 바뀌면 이전 값으로 스무딩하지 않도록
+    private func resetTracking() {
+        filter.reset()
+        zoneSnapper.reset()
+        lastPupilOffset = nil
+    }
+
+    /// 처리 1회당 비용을 방식·장치별로 지수 평균해 둔다 (AI 모드 비교표)
+    private func recordModeCost(_ snapshot: PipelineSnapshot) {
+        guard snapshot.processedFPS > 0, !isCalibrating else { return }
+        let key = ModeCostKey(mode: snapshot.mode, device: snapshot.devices.preference)
+        var cost = latestModeCosts[key] ?? ModeCost(cpuMs: snapshot.cpuPerFrameMs, wallMs: snapshot.wallPerFrameMs, samples: 0)
+        cost.cpuMs = cost.cpuMs * 0.8 + snapshot.cpuPerFrameMs * 0.2
+        cost.wallMs = cost.wallMs * 0.8 + snapshot.wallPerFrameMs * 0.2
+        cost.samples += 1
+        cost.detectionShare = snapshot.processedFPS > 0 ? snapshot.detectFPS / snapshot.processedFPS : 0
+        latestModeCosts[key] = cost
+        if publishesLiveValues { modeCosts = latestModeCosts }
     }
 
     private func adjustmentChanged(from old: GazeAdjustment) {
@@ -835,7 +943,8 @@ final class AppModel {
                 targetHz: self.cameraRunning ? self.appliedHz : 0,
                 detectMs: p.detectWallMs, landmarksMs: p.landmarksWallMs,
                 notificationChecksPerSecond: perSecond(\.windowChecks), axCallsPerSecond: perSecond(\.axCalls),
-                rate: self.trackingRate, profile: self.policy.applied, governorScale: self.governorScale)
+                rate: self.trackingRate, profile: self.policy.applied, governorScale: self.governorScale,
+                analysisMode: self.analysisMode)
         }
         // 시작 직후 10초는 Vision 모델 로드(일회성)로 CPU 가 튀어 그래프 눈금을 망가뜨리므로 기록하지 않는다
         if now - launchTime > 10 { historyBuffer.append(sample) }
@@ -896,6 +1005,7 @@ final class AppModel {
         pipeline = latestPipeline
         targetHz = appliedHz
         history = historyBuffer.samples
+        modeCosts = latestModeCosts
     }
 
     /// 앱 종료 시 알림 창을 원래 위치로 되돌리고 카메라를 끈다.
@@ -958,12 +1068,21 @@ final class AppModel {
 
     // MARK: - 저장
 
+    /// 보정 샘플에는 빠진 값(NaN)이 있어 JSON 에 문자열로 적는다
     private static func load<T: Decodable>(_ type: T.Type, _ key: String, from defaults: UserDefaults) -> T? {
-        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(T.self, from: $0) }
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
+        return defaults.data(forKey: key).flatMap { try? decoder.decode(T.self, from: $0) }
     }
 
     private func save<T: Encodable>(_ value: T, _ key: String) {
-        if let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: key) }
+        let encoder = JSONEncoder()
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
+        do {
+            defaults.set(try encoder.encode(value), forKey: key)
+        } catch {
+            Log.error("설정 저장 실패(\(key)): \(error.localizedDescription)")
+        }
     }
 }
 
@@ -1033,4 +1152,19 @@ struct LiveStats: Equatable {
     var averageProcessedFPS: Double = 0
     /// 실행 후 각 속도 단계에 머문 시간 비율
     var rateShare: [TrackingRate: Double] = [:]
+}
+
+/// AI 모드 비교표의 한 칸 (분석 방식 × 연산 장치)
+struct ModeCostKey: Hashable {
+    var mode: AnalysisMode
+    var device: ComputePreference
+}
+
+/// 처리 1회당 평균 비용 (검출·랜드마크·특징 합, 추적 프레임 포함)
+struct ModeCost: Equatable {
+    var cpuMs: Double
+    var wallMs: Double
+    var samples: Int
+    /// 처리 중 전체 얼굴 검출 비율
+    var detectionShare: Double = 0
 }
