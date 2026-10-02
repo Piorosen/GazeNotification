@@ -160,11 +160,16 @@ struct MenuView: View {
             }
 
             if model.placementSource == .gaze {
-                DisclosureGroup("카메라 미리보기 (펼치면 \(Int(TrackingRate.liveHz))회/s)", isExpanded: $showPreview) {
+                DisclosureGroup(isExpanded: $showPreview) {
                     CameraPreview(session: model.captureSession)
                         .frame(height: 180)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .padding(.top, 4)
+                } label: {
+                    // 화살표뿐 아니라 글자를 눌러도 펼치고 접는다
+                    Button("카메라 미리보기 (펼치면 \(Int(TrackingRate.liveHz))회/s)") { showPreview.toggle() }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("menu.preview")
                 }
                 .font(.caption)
             }

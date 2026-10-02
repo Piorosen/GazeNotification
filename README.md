@@ -87,6 +87,24 @@ tccutil reset Accessibility party.udon.GazeNotification
 tccutil reset Camera party.udon.GazeNotification
 ```
 
+### 테스트
+
+```sh
+scripts/test.sh unit   # 단위 테스트 (Swift Testing, 화면을 건드리지 않음, 약 1초)
+scripts/test.sh ui     # UI 테스트 (XCUITest) — ⚠️ 실제 화면에서 마우스·키보드를 움직인다, 약 5분
+scripts/test.sh        # 둘 다
+```
+
+- **단위 테스트**(`GazeNotificationTests`): 회귀·곡선·점별 보간·교차검증, 보정 저장(NaN 포함)·예전 형식 이전, 수동 보정·구역,
+  프로필 규칙·제한값·CPU 상한 수렴, 처리 간격(장치 fps 와 무관하게 목표 ±5%)·30fps 풀림 감시·장치 fps 선택,
+  추적 상자·알림 슬롯 계산, 가상 카메라, AppModel 설정 전환·저장·손상된 값 처리.
+- **UI 테스트**(`GazeNotificationUITests`): 앱을 `-uiTesting` 모드로 띄운다 — 카메라 대신 가상 사용자(보정 중엔 화면의 점을 보고,
+  그 밖엔 좌우로 오감), 알림 창 이동·권한 요청 없음, 설정은 별도 저장소. 메뉴 상태·켜고 끄기·위치 기준·미리보기,
+  설정 창 네 탭의 컨트롤, 그래프 기록·마우스 선택, 보정(전체·빠른 위치 맞춤·ESC 취소)을 끝에서 끝까지, 다시 실행 후 설정 유지.
+- macOS UI 테스트에는 iOS 시뮬레이터 같은 가상 화면이 없어 로그인한 화면을 직접 조작한다. 그래서 확인을 묻고 시작한다
+  (`GAZE_UI_TEST_OK=1` 이면 묻지 않음). 실행 중인 일반 GazeNotification 은 건드리지 않는다.
+- Apple Development 인증서가 없으면 ad-hoc 서명 + Hardened Runtime 끔으로 빌드한다 (결과: `build/tests/*.xcresult`).
+
 ### 개발용 명령
 
 실행 중인 앱(Debug 빌드, 또는 `defaults write party.udon.GazeNotification debugCommands -bool YES` 인 Release)에 터미널에서:
@@ -156,10 +174,12 @@ scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automa
 ```
 GazeNotification/
   App/            GazeNotificationApp (MenuBarExtra), AppModel (전체 연결·설정·정책·CPU 상한)
-  Camera/         CameraService — 캡처 세션, 장치 선택, 포맷·장치 fps·시간 기준 처리·fps 감시
+  Camera/         CameraService — 캡처 세션, 장치 선택, 포맷·장치 fps·시간 기준 처리·fps 감시,
+                  FrameScheduling (처리 간격·감시·fps 선택), SimulatedFaceSource (UI 테스트용 가상 카메라)
   Gaze/           FaceFeatureExtractor (Vision, 분석 방식·추적), AIMode (방식·장치·모델 종류),
                   GazeModel (기본식·ridge·One Euro), GazeEstimators (모델·교차검증·보정 묶음), GazeAdjustment (수동 보정)
-  Performance/    PerformanceSettings (프로필·제한값), PowerMonitor (전원·발열·화면), PerformanceHistory (기록·CPU 측정)
+  Performance/    PerformanceSettings (프로필·제한값), PowerMonitor (전원·발열·화면), PerformanceHistory (기록·CPU 측정),
+                  CPUGovernor (CPU 상한)
   Calibration/    전체 화면 보정 UI + 샘플 수집 (전체 보정 · 빠른 위치 맞춤)
   Notifications/  NotificationMover (사전 배치·창 서버 감시·원위치 복구), AXHelpers
   Overlay/        알림 위치 표시 막대
@@ -167,6 +187,8 @@ GazeNotification/
                   설정 창(SettingsWindow · PerformanceView · LimitsView · AIModeView · CalibrationAdjustView)
   Assets.xcassets 앱 아이콘 (swift scripts/make-icon.swift 로 다시 그림)
 Config/           Info.plist, entitlements (샌드박스 끔 — 다른 앱 창을 옮기려면 필요)
+GazeNotificationTests/    단위 테스트 (Swift Testing)
+GazeNotificationUITests/  UI 테스트 (XCUITest)
 ```
 
 ## 한계

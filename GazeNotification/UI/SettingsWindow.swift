@@ -36,7 +36,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 680, height: 520)
         window.center()
-        window.setFrameAutosaveName("GazeNotificationSettings")
+        if AppEnvironment.isUITesting, let screen = NSScreen.main?.visibleFrame {
+            // UI 테스트: 스크롤 없이 모든 컨트롤이 보이도록 화면 높이만큼 (위치·크기를 저장하지 않음)
+            let height = min(screen.height - 40, 1900)
+            window.setFrame(NSRect(x: screen.midX - 380, y: screen.maxY - height - 20, width: 760, height: height), display: false)
+        } else {
+            window.setFrameAutosaveName("GazeNotificationSettings")
+        }
         window.delegate = self
         return window
     }
