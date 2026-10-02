@@ -24,6 +24,10 @@
     return "en";
   }
 
+  // perf.js 도 같은 사전을 쓴다
+  window.gnText = (key, values) => t(key, values);
+  window.gnLanguage = () => lang;
+
   function t(key, values) {
     let text = (dict[lang] && dict[lang][key]) ?? dict.en[key] ?? "";
     for (const [name, value] of Object.entries(values || {})) text = text.replaceAll(`{${name}}`, value);
@@ -51,14 +55,16 @@
       const [attr, key] = el.dataset.i18nAttr.split(":");
       el.setAttribute(attr, t(key));
     });
-    document.querySelectorAll("img[data-shot]").forEach((img) => {
-      img.src = `assets/screens/${LANGS[lang]}/${img.dataset.shot}.png`;
+    // 화면 살펴보기의 앱 스크린샷은 언어마다 따로 찍어 두었다
+    document.querySelectorAll("img[data-tour]").forEach((img) => {
+      img.src = `assets/tour/${LANGS[lang]}/${img.dataset.tour}.webp`;
     });
     const picker = document.getElementById("lang");
     if (picker) picker.value = lang;
     renderRelease();
     renderMode();
     root.classList.add("i18n-ready");
+    document.dispatchEvent(new CustomEvent("gn:language", { detail: { lang } })); // perf.js 가 그래프 글자를 다시 그린다
   }
 
   // MARK: - 최신 릴리스

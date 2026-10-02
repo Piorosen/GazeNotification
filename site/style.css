@@ -22,6 +22,15 @@
 
   --measure: 66ch;
   --gutter: clamp(16px, 4vw, 40px);
+
+  /* 성능 그래프: 앱과 같은 범주형 팔레트 1~3번 (밝은 화면·어두운 화면 각각 검증) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --chart-reference: #7a7974;
+  --chart-grid: #e6e8f2;
+  --chart-axis: #c4c8dd;
+  --chart-band: rgba(29, 27, 76, 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +42,13 @@
     --line: #2e2c5e;
     --iris: #93a9ff;
     --bezel: #08071d;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --chart-reference: #a3a29b;
+    --chart-grid: #2a2958;
+    --chart-axis: #3b3974;
+    --chart-band: rgba(236, 238, 255, 0.05);
   }
 }
 
@@ -222,11 +238,92 @@ p { margin: 0; }
 .details dt { font-weight: 700; margin-bottom: 6px; }
 .details dd { margin: 0; color: var(--ink-soft); max-width: var(--measure); }
 
-.screens { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 760px); gap: 28px; align-items: start; }
-@media (max-width: 960px) { .screens { grid-template-columns: 1fr; } .shot-menu { max-width: 420px; } }
-.shot { margin: 0; }
-.shot img { border-radius: 12px; border: 1px solid var(--line); background: #2b2b2d; }
-.shot figcaption { margin-top: 10px; font-size: 14px; color: var(--ink-soft); }
+/* 화면 살펴보기: 왼쪽 설명, 오른쪽 실제 앱 화면. 화면이 길면 설명이 따라 내려온다 */
+.section-lead { max-width: var(--measure); color: var(--ink-soft); margin: -8px 0 8px; }
+.feature {
+  display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 24px 56px;
+  align-items: start; padding: 48px 0; border-top: 1px solid var(--line);
+}
+.feature:first-of-type { margin-top: 28px; }
+.feature-text { position: sticky; top: 24px; }
+.feature-text > p { color: var(--ink-soft); }
+.feature-points { margin: 18px 0 0; display: grid; gap: 14px; }
+.feature-points dt { font-weight: 650; font-size: 15px; }
+.feature-points dd { margin: 2px 0 0; color: var(--ink-soft); font-size: 15px; line-height: 1.55; }
+.feature-figure { margin: 0; display: grid; gap: 16px; justify-items: start; }
+.ui-shot { border-radius: 12px; border: 1px solid var(--line); background: #2b2b2d; box-shadow: 0 18px 40px -24px rgba(17, 12, 70, 0.45); }
+.ui-shot-menu { width: 100%; max-width: 420px; }
+.ui-shot-settings { width: 100%; max-width: 640px; }
+.feature-wide { grid-template-columns: minmax(0, 1fr); }
+.feature-wide .feature-text { position: static; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 0 56px; align-items: start; }
+.feature-wide .feature-text > h3, .feature-wide .feature-text > p { grid-column: 1; }
+.feature-wide .feature-points { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; }
+.feature-calibration .calibration-screen { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .feature, .feature-wide .feature-text { grid-template-columns: minmax(0, 1fr); }
+  .feature-text { position: static; }
+  .feature-wide .feature-points { grid-column: 1; grid-row: auto; margin-top: 18px; }
+}
+
+/* 보정 화면: 배경 화면 위에 앱이 그린 반투명 보정 화면을 겹친다 */
+.calibration-screen { cursor: default; aspect-ratio: 32 / 9; }
+.calibration-overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* 성능 그래프 */
+.perf { display: grid; gap: 14px; }
+.perf-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.segmented { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.segmented button {
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-soft);
+  border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.perf-hint { font-size: 14px; color: var(--ink-soft); }
+.perf-charts { display: grid; gap: 12px; border-radius: 14px; }
+.perf-status { color: var(--ink-soft); padding: 24px 0; }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 8px; }
+.chart-head { display: flex; align-items: baseline; gap: 8px; }
+.chart-head h4 { margin: 0; font-size: 15px; }
+.chart-unit { font-size: 13px; color: var(--ink-soft); }
+.chart-legend { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend-name { color: var(--ink-soft); }
+.chart-legend strong, .chart-tip strong { font-variant-numeric: tabular-nums; font-weight: 650; }
+.line-key { width: 14px; height: 0; border-top: 2px solid var(--key); border-radius: 2px; flex: none; }
+.line-key.dashed { border-top-style: dashed; }
+.chart-plot { position: relative; }
+.chart-plot svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
+.chart .axis { stroke: var(--chart-axis); stroke-width: 1; }
+.chart .tick { fill: var(--ink-soft); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .band { fill: var(--chart-band); }
+.chart .band-label { fill: var(--ink-soft); font-size: 11px; font-weight: 600; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line.reference { stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart .limit { stroke: var(--chart-reference); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart .limit-label { fill: var(--ink-soft); font-size: 11px; }
+.chart .crosshair { stroke: var(--ink-soft); stroke-opacity: 0.5; stroke-width: 1; }
+.chart .dot { stroke: var(--surface); stroke-width: 2; }
+.chart-tip {
+  position: absolute; top: 8px; width: 190px; padding: 8px 10px; border-radius: 8px; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 24px -12px rgba(17, 12, 70, 0.35);
+  font-size: 13px; display: grid; gap: 3px;
+}
+.chart-tip[hidden] { display: none; }
+.tip-head { color: var(--ink-soft); font-size: 12px; margin-bottom: 2px; white-space: pre; }
+.tip-row { display: grid; grid-template-columns: 14px auto 1fr; align-items: center; gap: 7px; }
+.tip-row span:last-child { color: var(--ink-soft); }
+.perf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 24px; }
+.stat { display: grid; gap: 2px; padding: 12px 0; border-top: 1px solid var(--line); }
+.stat span { font-size: 13px; color: var(--ink-soft); }
+.stat strong { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.01em; }
+.perf-table summary { cursor: pointer; font-weight: 600; font-size: 15px; color: var(--iris); width: fit-content; }
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+.perf-table table { border-collapse: collapse; font-size: 13px; min-width: 640px; width: 100%; font-variant-numeric: tabular-nums; }
+.perf-table caption { text-align: left; color: var(--ink-soft); padding-bottom: 6px; }
+.perf-table th, .perf-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.perf-table thead th { color: var(--ink-soft); font-weight: 600; }
+.perf-table th:first-child, .perf-table td:nth-child(2) { text-align: left; }
 
 .faq { max-width: 860px; border-top: 1px solid var(--line); }
 .faq details { border-bottom: 1px solid var(--line); }

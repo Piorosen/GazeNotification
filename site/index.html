@@ -106,29 +106,152 @@
       </ol>
     </section>
 
+    <section class="wrap section tour" id="tour" aria-labelledby="tour-title">
+      <h2 id="tour-title" data-i18n="tour.title">A closer look</h2>
+      <p class="section-lead" data-i18n="tour.lead"></p>
+
+      <article class="feature" aria-labelledby="tour-menu-title">
+        <div class="feature-text">
+          <h3 id="tour-menu-title" data-i18n="tour.menu.title"></h3>
+          <p data-i18n="tour.menu.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.menu.map.t"></dt><dd data-i18n="tour.menu.map.d"></dd></div>
+          <div><dt data-i18n="tour.menu.status.t"></dt><dd data-i18n="tour.menu.status.d"></dd></div>
+          <div><dt data-i18n="tour.menu.actions.t"></dt><dd data-i18n="tour.menu.actions.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-menu" data-tour="menu-panel" data-i18n-attr="alt:tour.menu.alt" alt="" width="420" height="396" loading="lazy" decoding="async">
+        </figure>
+      </article>
+
+      <article class="feature" aria-labelledby="tour-processing-title">
+        <div class="feature-text">
+          <h3 id="tour-processing-title" data-i18n="tour.processing.title"></h3>
+          <p data-i18n="tour.processing.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.processing.state.t"></dt><dd data-i18n="tour.processing.state.d"></dd></div>
+          <div><dt data-i18n="tour.processing.stages.t"></dt><dd data-i18n="tour.processing.stages.d"></dd></div>
+          <div><dt data-i18n="tour.processing.time.t"></dt><dd data-i18n="tour.processing.time.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-menu" data-tour="menu-processing" data-i18n-attr="alt:tour.processing.alt" alt="" width="420" height="403" loading="lazy" decoding="async">
+        </figure>
+      </article>
+
+      <article class="feature" aria-labelledby="tour-gaze-title">
+        <div class="feature-text">
+          <h3 id="tour-gaze-title" data-i18n="tour.gaze.title"></h3>
+          <p data-i18n="tour.gaze.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.gaze.features.t"></dt><dd data-i18n="tour.gaze.features.d"></dd></div>
+          <div><dt data-i18n="tour.gaze.steps.t"></dt><dd data-i18n="tour.gaze.steps.d"></dd></div>
+          <div><dt data-i18n="tour.gaze.placement.t"></dt><dd data-i18n="tour.gaze.placement.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-menu" data-tour="menu-gaze" data-i18n-attr="alt:tour.gaze.alt" alt="" width="420" height="399" loading="lazy" decoding="async">
+        </figure>
+      </article>
+
+      <article class="feature feature-wide" aria-labelledby="tour-perf-title">
+        <div class="feature-text">
+          <h3 id="tour-perf-title" data-i18n="tour.perf.title"></h3>
+          <p data-i18n="tour.perf.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.perf.sync.t"></dt><dd data-i18n="tour.perf.sync.d"></dd></div>
+          <div><dt data-i18n="tour.perf.limit.t"></dt><dd data-i18n="tour.perf.limit.d"></dd></div>
+          <div><dt data-i18n="tour.perf.avg.t"></dt><dd data-i18n="tour.perf.avg.d"></dd></div>
+          </dl>
+        </div>
+        <div class="perf" id="perf">
+          <div class="perf-controls">
+            <div class="segmented" role="group" data-i18n-attr="aria-label:perf.range" aria-label="Period">
+              <button type="button" data-range="60" data-i18n="perf.range.60" aria-pressed="false">1 min</button>
+              <button type="button" data-range="300" data-i18n="perf.range.300" aria-pressed="false">5 min</button>
+              <button type="button" data-range="600" data-i18n="perf.range.600" aria-pressed="true">10 min</button>
+            </div>
+            <p class="perf-hint" data-i18n="perf.hint"></p>
+          </div>
+          <div class="perf-charts" id="perf-charts" tabindex="0" role="group" data-i18n-attr="aria-label:perf.charts" aria-label="Performance recording">
+            <p class="perf-status" id="perf-status" data-i18n="perf.loading"></p>
+          </div>
+          <div class="perf-stats" id="perf-stats"></div>
+          <details class="perf-table">
+            <summary data-i18n="perf.table.show">Show as table</summary>
+            <div class="table-scroll"><table id="perf-table"></table></div>
+          </details>
+        </div>
+      </article>
+
+      <article class="feature" aria-labelledby="tour-limits-title">
+        <div class="feature-text">
+          <h3 id="tour-limits-title" data-i18n="tour.limits.title"></h3>
+          <p data-i18n="tour.limits.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.limits.profile.t"></dt><dd data-i18n="tour.limits.profile.d"></dd></div>
+          <div><dt data-i18n="tour.limits.rates.t"></dt><dd data-i18n="tour.limits.rates.d"></dd></div>
+          <div><dt data-i18n="tour.limits.saving.t"></dt><dd data-i18n="tour.limits.saving.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-settings" data-tour="limits" data-i18n-attr="alt:tour.limits.alt" alt="" width="640" height="774" loading="lazy" decoding="async">
+        </figure>
+      </article>
+
+      <article class="feature" aria-labelledby="tour-ai-title">
+        <div class="feature-text">
+          <h3 id="tour-ai-title" data-i18n="tour.ai.title"></h3>
+          <p data-i18n="tour.ai.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.ai.method.t"></dt><dd data-i18n="tour.ai.method.d"></dd></div>
+          <div><dt data-i18n="tour.ai.device.t"></dt><dd data-i18n="tour.ai.device.d"></dd></div>
+          <div><dt data-i18n="tour.ai.model.t"></dt><dd data-i18n="tour.ai.model.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-settings" data-tour="ai" data-i18n-attr="alt:tour.ai.alt" alt="" width="640" height="906" loading="lazy" decoding="async">
+        </figure>
+      </article>
+
+      <article class="feature feature-calibration" aria-labelledby="tour-calib-title">
+        <div class="calibration-screen screen" aria-hidden="false">
+          <div class="menubar" aria-hidden="true">
+            <span class="menubar-left"><span class="apple-dot"></span><b>Finder</b><span>File</span><span>Edit</span><span>View</span></span>
+            <span class="menubar-right"><span>9:41</span></span>
+          </div>
+          <div class="desk" aria-hidden="true">
+            <div class="window w1"><i></i><i></i><i></i></div>
+            <div class="window w2"><i></i><i></i><i></i></div>
+            <div class="window w3"><i></i><i></i><i></i></div>
+          </div>
+          <img class="calibration-overlay" data-tour="calibration-screen" data-i18n-attr="alt:tour.calib.screen.alt" alt="" width="2560" height="720" loading="lazy" decoding="async">
+        </div>
+        <div class="feature-text">
+          <h3 id="tour-calib-title" data-i18n="tour.calib.title"></h3>
+          <p data-i18n="tour.calib.body"></p>
+          <dl class="feature-points">
+          <div><dt data-i18n="tour.calib.screen.t"></dt><dd data-i18n="tour.calib.screen.d"></dd></div>
+          <div><dt data-i18n="tour.calib.preview.t"></dt><dd data-i18n="tour.calib.preview.d"></dd></div>
+          <div><dt data-i18n="tour.calib.quick.t"></dt><dd data-i18n="tour.calib.quick.d"></dd></div>
+          <div><dt data-i18n="tour.calib.weights.t"></dt><dd data-i18n="tour.calib.weights.d"></dd></div>
+          </dl>
+        </div>
+        <figure class="feature-figure">
+          <img class="ui-shot ui-shot-settings" data-tour="tuning" data-i18n-attr="alt:tour.calib.tuning.alt" alt="" width="640" height="605" loading="lazy" decoding="async">
+          <img class="ui-shot ui-shot-settings" data-tour="weights" data-i18n-attr="alt:tour.calib.weights.alt" alt="" width="640" height="319" loading="lazy" decoding="async">
+        </figure>
+      </article>
+    </section>
+
     <section class="wrap section" aria-labelledby="details-title">
-      <h2 id="details-title" data-i18n="details.title">Battery, privacy, accuracy</h2>
+      <h2 id="details-title" data-i18n="details.title">Battery, privacy, and languages</h2>
       <dl class="details">
         <div><dt data-i18n="details.battery.title">Easy on the battery</dt><dd data-i18n="details.battery.body">It switches to Balanced on a power adapter and to Power Saving on battery, in Low Power Mode, or when the Mac runs hot. It computes less while your gaze rests or you're away, and turns the camera off when the screen locks. On an M4 Max the whole app used about 3% CPU in Power Saving and about 7% in Balanced.</dd></div>
         <div><dt data-i18n="details.privacy.title">Video never leaves your Mac</dt><dd data-i18n="details.privacy.body">Camera frames are turned into a few numbers describing your face direction in memory and discarded right away. No video or photos are saved, and the app has no networking at all.</dd></div>
-        <div><dt data-i18n="details.tune.title">Tune it yourself</dt><dd data-i18n="details.tune.body">On top of the calibration you can adjust the horizontal shift and range, per-feature weights, jitter suppression, and screen zones by hand. It automatically picks the lowest-error combination of three face analysis methods and three estimation models.</dd></div>
-        <div><dt data-i18n="details.graphs.title">See what it computes</dt><dd data-i18n="details.graphs.body">Graphs of CPU usage, processing rate, and time per run over the last 10 minutes, with your own limits for each situation and a CPU cap.</dd></div>
         <div><dt data-i18n="details.lang.title">Four languages</dt><dd data-i18n="details.lang.body">한국어, English, 日本語, 简体中文. Switch languages from the app's menu.</dd></div>
       </dl>
-    </section>
-
-    <section class="wrap section" aria-labelledby="screens-title">
-      <h2 id="screens-title" data-i18n="screens.title">Screenshots</h2>
-      <div class="screens">
-        <figure class="shot shot-menu">
-          <img data-shot="menu" src="assets/screens/en/menu.png" width="420" height="590" alt="">
-          <figcaption data-i18n="screens.menu">The menu bar panel shows the current status and the per-frame pipeline.</figcaption>
-        </figure>
-        <figure class="shot shot-performance">
-          <img data-shot="performance" src="assets/screens/en/performance.png" width="760" height="650" alt="">
-          <figcaption data-i18n="screens.performance">Performance graphs record CPU, processing rate, and time per run every second.</figcaption>
-        </figure>
-      </div>
     </section>
 
     <section class="wrap section" id="install" aria-labelledby="install-title">
@@ -179,6 +302,8 @@
   </footer>
 
   <script src="i18n.js"></script>
+  <script src="i18n-tour.js"></script>
   <script src="app.js"></script>
+  <script src="perf.js"></script>
 </body>
 </html>
