@@ -19,21 +19,46 @@ final class CalibrationState {
     var targetX = 0.5
     var progress = 0.0
     var faceDetected = false
-    let targets: [Double]
+    let plan: CalibrationPlan
+    var targets: [Double] { plan.targets }
 
-    init(targets: [Double]) { self.targets = targets }
+    init(plan: CalibrationPlan) { self.plan = plan }
 }
 
-/// 전체 화면 창에 점을 순서대로 띄우고, 각 점을 보는 동안의 얼굴 특징을 모아 `GazeCalibration` 을 학습한다.
+/// 보정 화면에서 할 일: 어떤 점을 얼마나 보게 하고, 모은 샘플로 무엇을 할지
+struct CalibrationPlan {
+    var title: String
+    var intro: String
+    /// 점의 가로 위치 (화면 폭 비율, 보여 주는 순서대로)
+    var targets: [Double]
+    var collectDuration: Duration
+    var minSamplesPerTarget = 6
+    /// 모은 샘플을 평가한다. 성공하면 보여 줄 메시지와 적용할 동작, 실패하면 이유
+    var evaluate: @MainActor ([CalibrationSample]) -> Result<CalibrationOutcome, CalibrationFailure>
+
+    /// 화면 양 끝(4%, 96%) 사이에 점 n 개를 고르게
+    static func evenTargets(_ count: Int) -> [Double] {
+        let n = max(2, count)
+        return (0..<n).map { 0.04 + 0.92 * Double($0) / Double(n - 1) }
+    }
+}
+
+struct CalibrationOutcome {
+    var message: String
+    var apply: @MainActor () -> Void
+}
+
+struct CalibrationFailure: Error {
+    var message: String
+}
+
+/// 전체 화면 창에 점을 순서대로 띄우고, 각 점을 보는 동안의 얼굴 특징을 모아 `CalibrationPlan.evaluate` 에 넘긴다.
 @MainActor
 final class CalibrationController {
-    static let targets: [Double] = [0.04, 0.27, 0.5, 0.73, 0.96]
     /// 목표점 세로 위치 (화면 높이 비율, 위=0). 알림이 뜨는 상단 근처를 보게 한다.
     static let targetY: Double = 0.15
 
     private let settleDuration: Duration = .milliseconds(900)
-    private let collectDuration: Duration = .milliseconds(1600)
-    private let minSamplesPerTarget = 6
 
     private var window: NSWindow?
     private var state: CalibrationState?
@@ -41,16 +66,17 @@ final class CalibrationController {
     private var keyMonitor: Any?
     private var samples: [CalibrationSample] = []
     private var collectingTarget: Double?
-    private var completion: ((GazeCalibration?) -> Void)?
+    private var completion: ((CalibrationOutcome?) -> Void)?
 
     var isActive: Bool { window != nil }
 
-    func begin(on screen: NSScreen, completion: @escaping (GazeCalibration?) -> Void) {
+    /// - Parameter completion: 성공하면 결과(적용은 호출한 쪽에서), 취소·실패면 nil
+    func begin(on screen: NSScreen, plan: CalibrationPlan, completion: @escaping (CalibrationOutcome?) -> Void) {
         guard !isActive else { return }
         self.completion = completion
         samples = []
 
-        let state = CalibrationState(targets: Self.targets)
+        let state = CalibrationState(plan: plan)
         self.state = state
 
         let window = KeyableWindow(contentRect: screen.frame, styleMask: [.borderless],
@@ -86,11 +112,12 @@ final class CalibrationController {
 
     private func run() async {
         guard let state else { return }
+        let plan = state.plan
         do {
             state.phase = .intro
             try await Task.sleep(for: .milliseconds(2500))
 
-            for (index, x) in Self.targets.enumerated() {
+            for (index, x) in plan.targets.enumerated() {
                 state.targetIndex = index
                 state.targetX = x
                 state.progress = 0
@@ -101,25 +128,27 @@ final class CalibrationController {
                 collectingTarget = x
                 let steps = 16
                 for step in 1...steps {
-                    try await Task.sleep(for: collectDuration / steps)
+                    try await Task.sleep(for: plan.collectDuration / steps)
                     state.progress = Double(step) / Double(steps)
                 }
                 collectingTarget = nil
             }
 
             let perTarget = Dictionary(grouping: samples, by: \.target).mapValues(\.count)
-            let missing = Self.targets.filter { (perTarget[$0] ?? 0) < minSamplesPerTarget }
-            let model = missing.isEmpty ? GazeCalibration.fit(samples) : nil
-            Log.info("보정 샘플 \(samples.count)개, 목표별 \(perTarget.sorted { $0.key < $1.key }.map(\.value))")
+            let missing = plan.targets.filter { (perTarget[$0] ?? 0) < plan.minSamplesPerTarget }
+            Log.info("\(plan.title) 샘플 \(samples.count)개, 목표별 \(perTarget.sorted { $0.key < $1.key }.map(\.value))")
 
-            if let model {
-                state.phase = .done(String(format: "평균 오차 약 %.1f%% (화면 폭 기준)", model.rmse * 100))
-                Log.info("보정 완료 rmse=\(model.rmse) weights=\(model.weights) used=\(model.used)")
+            let result: Result<CalibrationOutcome, CalibrationFailure> = missing.isEmpty
+                ? plan.evaluate(samples)
+                : .failure(CalibrationFailure(message: "얼굴이 충분히 감지되지 않았습니다. 카메라 위치와 조명을 확인한 뒤 다시 시도하세요."))
+            switch result {
+            case .success(let outcome):
+                state.phase = .done(outcome.message)
                 try await Task.sleep(for: .milliseconds(1800))
-                finish(with: model)
-            } else {
-                state.phase = .failed("얼굴이 충분히 감지되지 않았습니다. 카메라 위치와 조명을 확인한 뒤 다시 시도하세요.")
-                try await Task.sleep(for: .milliseconds(2600))
+                finish(with: outcome)
+            case .failure(let failure):
+                state.phase = .failed(failure.message)
+                try await Task.sleep(for: .milliseconds(3000))
                 finish(with: nil)
             }
         } catch {
@@ -127,7 +156,7 @@ final class CalibrationController {
         }
     }
 
-    private func finish(with model: GazeCalibration?) {
+    private func finish(with outcome: CalibrationOutcome?) {
         guard window != nil else { return }
         task?.cancel()
         task = nil
@@ -139,7 +168,7 @@ final class CalibrationController {
         state = nil
         let completion = self.completion
         self.completion = nil
-        completion?(model)
+        completion?(outcome)
     }
 }
 
@@ -211,17 +240,16 @@ private struct CalibrationView: View {
 
     private var title: String {
         switch state.phase {
-        case .intro: "시선 보정"
+        case .intro: state.plan.title
         case .moving, .collecting: "점을 바라보세요 (\(state.targetIndex + 1)/\(state.targets.count))"
-        case .done: "보정 완료"
-        case .failed: "보정 실패"
+        case .done: "\(state.plan.title) 완료"
+        case .failed: "\(state.plan.title) 실패"
         }
     }
 
     private var subtitle: String {
         switch state.phase {
-        case .intro:
-            "화면 위쪽에 점이 왼쪽부터 차례로 나타납니다.\n평소 작업할 때처럼 자연스럽게 바라보세요. 고개를 돌려도 괜찮습니다."
+        case .intro: state.plan.intro
         case .moving: "점으로 시선을 옮기세요"
         case .collecting: "그대로 바라보세요…"
         case .done(let message), .failed(let message): message

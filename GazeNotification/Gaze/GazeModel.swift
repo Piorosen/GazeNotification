@@ -3,31 +3,42 @@ import Foundation
 /// 보정 전 기본 추정식. 카메라가 모니터 상단 중앙에 있고 사용자가 정면 ~70cm 에 앉았다고 가정한 대략값.
 /// 정확도는 낮으니 보정(`GazeCalibration`)을 권장.
 enum DefaultGazeModel {
-    /// (특징, 기울기, 기준값) — x = 0.5 + Σ 기울기 · (값 − 기준값)
+    /// (특징, 기울기, 기준값) — x = 0.5 + Σ 배율 · 기울기 · (값 − 기준값)
     static let terms: [(GazeFeature, Double, Double)] = [
         (.nose, -1.25, 0), (.pupil, -0.8, 0), (.faceX, -0.7, 0.5),
     ]
 
-    static func predict(_ f: FaceFeatures) -> Double {
-        var x = 0.5 - 1.25 * f.noseOffset - 0.7 * (f.faceX - 0.5)
-        if let pupil = f.pupilOffset { x -= 0.8 * pupil }
+    /// - Parameter gains: 특징별 기여 배율 (`GazeAdjustment.featureGains`)
+    static func predict(_ vector: [Double], gains: [Double] = []) -> Double {
+        var x = 0.5
+        for (feature, slope, center) in terms {
+            let value = vector[feature.rawValue]
+            guard value.isFinite else { continue }
+            x += featureGain(gains, feature) * slope * (value - center)
+        }
         return x
     }
 
-    static func breakdown(_ f: FaceFeatures) -> GazeBreakdown {
+    static func breakdown(_ f: FaceFeatures, gains: [Double] = []) -> GazeBreakdown {
         let vector = f.vector
         let rows = GazeFeature.allCases.map { feature -> GazeBreakdown.Term in
             let value = vector[feature.rawValue]
             guard let (_, slope, center) = terms.first(where: { $0.0 == feature }) else {
-                return .init(feature: feature, value: value, slope: nil, contribution: 0)
+                return .init(feature: feature, value: value, slope: nil, gain: featureGain(gains, feature), contribution: 0)
             }
-            let contribution = value.isFinite ? slope * (value - center) : 0
-            return .init(feature: feature, value: value, slope: slope, contribution: contribution)
+            let g = featureGain(gains, feature)
+            let contribution = value.isFinite ? g * slope * (value - center) : 0
+            return .init(feature: feature, value: value, slope: slope, gain: g, contribution: contribution)
         }
         return GazeBreakdown(modelName: "기본 추정식 (보정 전)",
                              formula: "x = 0.5 + Σ 기울기 × (값 − 기준)",
-                             intercept: 0.5, terms: rows, raw: predict(f))
+                             intercept: 0.5, terms: rows, raw: predict(vector, gains: gains))
     }
+}
+
+/// 배율 배열에서 특징의 배율 (없으면 1)
+func featureGain(_ gains: [Double], _ feature: GazeFeature) -> Double {
+    feature.rawValue < gains.count ? gains[feature.rawValue] : 1
 }
 
 /// 회귀 입력 특징 (`FaceFeatures.vector` 순서)
@@ -70,9 +81,11 @@ struct GazeBreakdown: Equatable {
         let feature: GazeFeature
         /// 원시 값 (yaw 는 라디안)
         let value: Double
-        /// 원시 단위 1 당 x 변화. nil = 이 모델에서 사용 안 함
+        /// 원시 단위 1 당 x 변화 (수동 배율 적용 전). nil = 이 모델에서 사용 안 함
         let slope: Double?
-        /// x 에 더해진 양 (화면 폭 비율)
+        /// 수동으로 정한 기여 배율 (1 = 그대로)
+        let gain: Double
+        /// x 에 더해진 양 (화면 폭 비율, 배율 적용 후)
         let contribution: Double
 
         var id: Int { feature.rawValue }
@@ -89,9 +102,11 @@ struct GazeBreakdown: Equatable {
     let formula: String
     let intercept: Double
     let terms: [Term]
-    /// 필터 전 추정값
+    /// 모델 출력 (필터 전)
     let raw: Double
-    /// One Euro 필터 후 값
+    /// 좌우 이동·범위 조정 후 (필터 전)
+    var adjusted: Double = 0
+    /// One Euro 필터·구역 맞춤 후 최종값
     var filtered: Double = 0
 }
 
@@ -112,29 +127,41 @@ struct GazeCalibration: Codable, Equatable {
     var rmse: Double
     var sampleCount: Int
     var createdAt: Date
+    /// 보정 점마다 학습 결과가 그 점을 얼마나 맞히는지 (예전 버전에서 저장한 보정에는 없음)
+    var targetResults: [TargetResult]?
 
-    func breakdown(_ f: FaceFeatures) -> GazeBreakdown {
+    struct TargetResult: Codable, Equatable {
+        var target: Double
+        /// 그 점을 보는 동안 모델 출력 평균
+        var predicted: Double
+        var samples: Int
+    }
+
+    func breakdown(_ f: FaceFeatures, gains: [Double] = []) -> GazeBreakdown {
         let vector = f.vector
         let rows = GazeFeature.allCases.map { feature -> GazeBreakdown.Term in
             let j = feature.rawValue
             let value = vector[j]
+            let g = featureGain(gains, feature)
             guard j < weights.count, used[j] else {
-                return .init(feature: feature, value: value, slope: nil, contribution: 0)
+                return .init(feature: feature, value: value, slope: nil, gain: g, contribution: 0)
             }
             let filled = value.isFinite ? value : means[j]
-            return .init(feature: feature, value: value, slope: weights[j] / scales[j],
-                         contribution: weights[j] * (filled - means[j]) / scales[j])
+            return .init(feature: feature, value: value, slope: weights[j] / scales[j], gain: g,
+                         contribution: g * weights[j] * (filled - means[j]) / scales[j])
         }
         return GazeBreakdown(modelName: String(format: "보정 모델 (ridge 회귀, 학습 오차 %.1f%%)", rmse * 100),
                              formula: "x = 평균 + Σ 기울기 × (값 − 보정 때 평균)",
-                             intercept: intercept, terms: rows, raw: predict(vector))
+                             intercept: intercept, terms: rows, raw: predict(vector, gains: gains))
     }
 
-    func predict(_ features: [Double]) -> Double {
+    /// - Parameter gains: 특징별 기여 배율 (`GazeAdjustment.featureGains`)
+    func predict(_ features: [Double], gains: [Double] = []) -> Double {
         var y = intercept
         for j in weights.indices where j < features.count && used[j] {
             let value = features[j].isFinite ? features[j] : means[j]
-            y += weights[j] * (value - means[j]) / scales[j]
+            let g = GazeFeature(rawValue: j).map { featureGain(gains, $0) } ?? 1
+            y += g * weights[j] * (value - means[j]) / scales[j]
         }
         return y
     }
@@ -189,6 +216,13 @@ struct GazeCalibration: Codable, Equatable {
             return acc + e * e
         }
         model.rmse = (squaredError / n).squareRoot()
+        model.targetResults = Dictionary(grouping: rows, by: \.target)
+            .map { target, group in
+                TargetResult(target: target,
+                             predicted: group.reduce(0) { $0 + model.predict($1.features) } / Double(group.count),
+                             samples: group.count)
+            }
+            .sorted { $0.target < $1.target }
         return model
     }
 }

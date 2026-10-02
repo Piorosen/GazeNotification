@@ -25,6 +25,35 @@ final class NotificationMover {
     var followThreshold: Double = 0.08
     /// 사람이 읽을 수 있는 이동 이벤트 설명
     var onMove: (@MainActor (String) -> Void)?
+    /// 알림 창이 화면에 나타나거나 사라질 때 (알림이 떠 있는 동안 추적 속도를 올리는 데 사용)
+    var onVisibilityChange: (@MainActor (Bool) -> Void)?
+
+    /// 알림이 없을 때 창 서버에 표시 여부를 묻는 횟수/s. 낮추면 전력이 줄고, 알림 센터 패널을 열 때 원위치가 조금 늦어진다.
+    var idleCheckHz: Double = 12 {
+        didSet {
+            idleInterval = 1 / idleCheckHz.clamped(to: 1...60)
+            if isRunning, !isPaused, timerInterval != idleInterval, animation == nil, !wasOnscreen,
+               CACurrentMediaTime() >= fastUntil {
+                scheduleTimer(idleInterval)
+            }
+        }
+    }
+
+    /// 화면이 꺼지거나 잠겼을 때 감시를 멈춘다 (창 위치는 그대로 둔다)
+    var isPaused = false {
+        didSet {
+            guard isPaused != oldValue, isRunning else { return }
+            if isPaused {
+                timer?.invalidate()
+                timer = nil
+                timerInterval = 0
+                animation = nil
+            } else {
+                scheduleTimer(idleInterval)
+                tick()
+            }
+        }
+    }
 
     private(set) var isRunning = false
 
@@ -81,7 +110,7 @@ final class NotificationMover {
         var start: CFTimeInterval
     }
 
-    private let idleInterval: TimeInterval = 1.0 / 12.0     // 표시 여부만 확인 (AX 호출 없음)
+    private var idleInterval: TimeInterval = 1.0 / 12.0     // 표시 여부만 확인 (AX 호출 없음)
     private let visibleInterval: TimeInterval = 1.0 / 5.0   // 알림 표시 중: 따라가기 판단
     private let fastInterval: TimeInterval = 1.0 / 30.0     // 알림이 막 떴을 때
     private let animationInterval: TimeInterval = 1.0 / 60.0
@@ -113,6 +142,7 @@ final class NotificationMover {
         }
 
         attachIfNeeded()
+        guard !isPaused else { return }
         scheduleTimer(idleInterval)
         tick()
     }
@@ -148,6 +178,10 @@ final class NotificationMover {
         screenObserver = nil
         restoreContainer()
         detach()
+        if wasOnscreen {
+            wasOnscreen = false
+            onVisibilityChange?(false)
+        }
     }
 
     // MARK: - NotificationCenter 연결
@@ -201,6 +235,7 @@ final class NotificationMover {
     }
 
     fileprivate func windowCreated() {
+        guard isRunning, !isPaused else { return }
         fastUntil = CACurrentMediaTime() + 1.5
         if timerInterval != fastInterval { scheduleTimer(fastInterval) }
         tick()
@@ -221,7 +256,7 @@ final class NotificationMover {
     // MARK: - 주기 처리
 
     private func tick() {
-        guard isRunning else { return }
+        guard isRunning, !isPaused else { return }
         tickCount += 1
         if app == nil {
             attachIfNeeded()
@@ -234,6 +269,7 @@ final class NotificationMover {
             onscreenSince = now
             fastUntil = max(fastUntil, now + 1.0)
         }
+        if onscreen != wasOnscreen { onVisibilityChange?(onscreen) }
         wasOnscreen = onscreen
 
         if onscreen || now < fastUntil {

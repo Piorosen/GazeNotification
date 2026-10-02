@@ -42,6 +42,23 @@ struct MenuView: View {
             }
             .controlSize(.large)
 
+            HStack(spacing: 8) {
+                Button {
+                    dismiss()
+                    model.openSettings(.performance)
+                } label: {
+                    Label("성능 그래프·연산 제한", systemImage: "chart.xyaxis.line")
+                        .frame(maxWidth: .infinity)
+                }
+                Button {
+                    dismiss()
+                    model.openSettings(.calibration)
+                } label: {
+                    Label("보정 직접 조정", systemImage: "slider.horizontal.3")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
             if let event = model.lastEvent {
                 Text(event)
                     .font(.caption)
@@ -129,9 +146,10 @@ struct MenuView: View {
             StatusRow(title: "손쉬운 사용",
                       value: model.accessibilityGranted ? "허용됨" : "필요",
                       color: model.accessibilityGranted ? .green : .red)
+            StatusRow(title: "연산", value: policyText, color: model.cameraPause == nil ? .green : .secondary)
 
             if model.placementSource == .gaze {
-                DisclosureGroup("카메라 미리보기 (펼치면 10fps)", isExpanded: $showPreview) {
+                DisclosureGroup("카메라 미리보기 (펼치면 \(Int(TrackingRate.liveHz))회/s)", isExpanded: $showPreview) {
                     CameraPreview(session: model.captureSession)
                         .frame(height: 180)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -191,13 +209,24 @@ struct MenuView: View {
 
     // MARK: - 표시 문자열
 
+    private var policyText: String {
+        let policy = model.policy
+        var text = policy.applied.title
+        if let reason = policy.reason { text += " (자동 · \(reason))" }
+        if model.governorScale < 0.999 { text += String(format: " · CPU 상한으로 %.0f%%", model.governorScale * 100) }
+        return text
+    }
+
     private var cameraText: String {
+        if model.placementSource == .gaze, model.isEnabled, let pause = model.cameraPause {
+            return pause == .screen ? "꺼짐 (화면 꺼짐·잠김)" : "꺼짐 (오래 자리 비움 — 입력하면 켜짐)"
+        }
         switch model.cameraStatus {
-        case .idle: model.placementSource == .gaze && model.isEnabled ? "시작 중…" : "꺼짐"
-        case .unauthorized: "권한 없음 (시스템 설정 → 카메라)"
-        case .noDevice: "카메라 없음"
-        case .running(let name): name
-        case .failed(let message): "오류: \(message)"
+        case .idle: return model.placementSource == .gaze && model.isEnabled ? "시작 중…" : "꺼짐"
+        case .unauthorized: return "권한 없음 (시스템 설정 → 카메라)"
+        case .noDevice: return "카메라 없음"
+        case .running(let name): return name
+        case .failed(let message): return "오류: \(message)"
         }
     }
 

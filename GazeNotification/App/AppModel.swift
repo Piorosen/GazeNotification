@@ -17,6 +17,42 @@ enum PlacementSource: String, CaseIterable, Identifiable {
     }
 }
 
+/// 설정 창의 탭
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case performance, limits, calibration
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .performance: "성능 그래프"
+        case .limits: "연산 제한"
+        case .calibration: "보정 조정"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .performance: "chart.xyaxis.line"
+        case .limits: "gauge.with.dots.needle.33percent"
+        case .calibration: "scope"
+        }
+    }
+}
+
+/// 카메라를 잠시 끈 이유
+enum CameraPause: Equatable {
+    /// 화면이 꺼졌거나 잠김
+    case screen
+    /// 자리 비움이 오래 이어짐 — 키보드·마우스 입력이 생기면 다시 켠다
+    case absence
+
+    var title: String {
+        switch self {
+        case .screen: "화면이 꺼져 있거나 잠겨 있어 카메라를 끔"
+        case .absence: "오래 자리를 비워 카메라를 끔 — 키보드·마우스를 쓰면 다시 켬"
+        }
+    }
+}
+
 /// 앱 전체 상태. 카메라 → 시선 추정 → 알림 이동을 연결한다.
 @MainActor
 @Observable
@@ -28,6 +64,12 @@ final class AppModel {
         static let source = "placementSource"
         static let camera = "cameraID"
         static let calibration = "calibration.v1"
+        static let profile = "performance.profile"
+        static let customLimits = "performance.customLimits"
+        static let adjustment = "gaze.adjustment"
+        static let calibrationPoints = "calibration.points"
+        static let calibrationSeconds = "calibration.seconds"
+        static let adjustOverlay = "adjust.showOverlay"
     }
 
     // MARK: 설정
@@ -69,13 +111,64 @@ final class AppModel {
         }
     }
 
+    /// 사용자가 고른 성능 프로필
+    var profile: PerformanceProfile {
+        didSet {
+            defaults.set(profile.rawValue, forKey: Keys.profile)
+            applyPolicy()
+        }
+    }
+
+    /// 사용자 지정 프로필의 값
+    var customLimits: PerformanceLimits {
+        didSet {
+            save(customLimits, Keys.customLimits)
+            applyPolicy()
+        }
+    }
+
+    /// 손으로 맞춘 시선 보정값
+    var adjustment: GazeAdjustment {
+        didSet {
+            save(adjustment, Keys.adjustment)
+            adjustmentChanged(from: oldValue)
+        }
+    }
+
+    /// 전체 시선 보정의 점 개수
+    var calibrationPointCount: Int {
+        didSet { defaults.set(calibrationPointCount, forKey: Keys.calibrationPoints) }
+    }
+
+    /// 전체 시선 보정에서 점 하나를 보는 시간(초)
+    var calibrationSeconds: Double {
+        didSet { defaults.set(calibrationSeconds, forKey: Keys.calibrationSeconds) }
+    }
+
+    /// 보정 조정 탭을 보는 동안 화면 상단에 위치 막대를 띄울지
+    var showOverlayWhileAdjusting: Bool {
+        didSet {
+            defaults.set(showOverlayWhileAdjusting, forKey: Keys.adjustOverlay)
+            updateOverlayVisibility()
+        }
+    }
+
+    var settingsTab: SettingsTab = .performance {
+        didSet {
+            guard oldValue != settingsTab else { return }
+            updateOverlayVisibility()
+        }
+    }
+
     // MARK: 실시간 상태
 
     private(set) var cameras: [CameraInfo] = []
     private(set) var cameraStatus: CameraStatus = .idle
     private(set) var faceDetected = false
-    /// 스무딩된 시선 가로 위치 (0...1). **메뉴가 열려 있을 때만 갱신**된다 (UI 표시용).
+    /// 스무딩된 시선 가로 위치 (0...1). **메뉴·설정 창이 보일 때만 갱신**된다 (UI 표시용).
     private(set) var gazeX: Double?
+    /// 수동 조정 전 모델 출력 (0...1, 보정 조정 미리보기용). 메뉴·설정 창이 보일 때만 갱신된다.
+    private(set) var rawGazeX: Double?
     /// Vision 처리 fps. 메뉴가 열려 있을 때만 갱신된다.
     private(set) var fps: Double = 0
 
@@ -84,25 +177,33 @@ final class AppModel {
         didSet {
             guard isMenuVisible != oldValue else { return }
             if isMenuVisible {
-                gazeX = latestGaze
                 fps = measuredFPS
-                pipeline = latestPipeline
-                startLiveStats()
-            } else {
-                stopLiveStats()
+                liveStats = latestLiveStats
+                publishLiveValues()
             }
         }
     }
 
-    /// 카메라 미리보기를 펼쳤는지. 펼쳐져 있는 동안만 10fps (메뉴를 여는 것만으로는 속도를 바꾸지 않는다).
+    /// 카메라 미리보기를 펼쳤는지. 펼쳐져 있는 동안만 실시간 속도 (메뉴를 여는 것만으로는 속도를 바꾸지 않는다).
     @ObservationIgnored var isPreviewVisible = false {
         didSet {
             guard isPreviewVisible != oldValue else { return }
-            updateAdaptiveStride(faceFound: faceDetected, now: CACurrentMediaTime())
+            updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
+            // 미리보기 레이어를 붙이거나 떼면 세션이 장치 fps 를 기본값(30fps)으로 되돌린다
+            camera.reapplyFormat()
         }
     }
 
-    // MARK: AI 연산 상세 (메뉴가 열려 있을 때만 갱신)
+    /// 설정 창이 화면에 보이는지 (`SettingsWindowController` 가 설정)
+    @ObservationIgnored var isSettingsVisible = false {
+        didSet {
+            guard isSettingsVisible != oldValue else { return }
+            if isSettingsVisible { publishLiveValues() }
+            updateOverlayVisibility()
+        }
+    }
+
+    // MARK: AI 연산 상세 (메뉴·설정 창이 보일 때만 갱신)
 
     /// 현재 추적 속도 단계
     private(set) var trackingRate: TrackingRate = .normal
@@ -111,8 +212,24 @@ final class AppModel {
     private(set) var cameraFormat: CameraFormatInfo?
     /// 가장 최근 프레임의 시선 계산 과정
     private(set) var gazeBreakdown: GazeBreakdown?
-    /// 1초마다 갱신되는 요약
+    /// 1초마다 갱신되는 요약 (메뉴용)
     private(set) var liveStats = LiveStats()
+    /// 1초 간격 성능 기록 (최근 10분)
+    private(set) var history: [PerformanceSample] = []
+    /// 지금 카메라에 요청한 처리 횟수/s
+    private(set) var targetHz: Double = 0
+
+    // MARK: 전원·정책
+
+    private(set) var power = PowerState()
+    private(set) var policy: EffectivePolicy
+    var limits: PerformanceLimits { policy.limits }
+    /// CPU 상한 때문에 처리 횟수를 줄인 비율 (1 = 줄이지 않음)
+    private(set) var governorScale = 1.0
+    /// nil = 카메라 켜짐
+    private(set) var cameraPause: CameraPause?
+    /// 알림 창이 화면에 떠 있는지
+    private(set) var notificationVisible = false
 
     var visionDevices: (detection: String, landmarks: String) { camera.visionDevices }
     private(set) var accessibilityGranted = Permissions.accessibilityTrusted
@@ -131,9 +248,13 @@ final class AppModel {
     var menuBarSymbol: String {
         if !isEnabled { return "eye.slash" }
         if !accessibilityGranted { return "exclamationmark.triangle" }
+        if placementSource == .gaze && cameraPause != nil { return "zzz" }
         if placementSource == .gaze && !faceDetected { return "eye.trianglebadge.exclamationmark" }
         return "eye"
     }
+
+    /// 보정 조정 탭이 화면에 보이는지 (실시간 속도·위치 막대)
+    var isAdjusting: Bool { isSettingsVisible && settingsTab == .calibration }
 
     // MARK: 내부
 
@@ -142,16 +263,27 @@ final class AppModel {
     private let mover = NotificationMover()
     private let overlay = GazeOverlay()
     private let calibrator = CalibrationController()
+    private let powerMonitor = PowerMonitor()
+    @ObservationIgnored private lazy var settingsWindow = SettingsWindowController(model: self)
     @ObservationIgnored private var filter = OneEuroFilter()
+    @ObservationIgnored private var zoneSnapper = ZoneSnapper()
     @ObservationIgnored private var lastFaceTime: TimeInterval = 0
     @ObservationIgnored private var lastPupilOffset: Double?
     @ObservationIgnored private var lastFeatures: FaceFeatures?
     /// 실제 추적값 (알림 이동·오버레이는 항상 이 값을 사용)
     @ObservationIgnored private var latestGaze: Double?
+    @ObservationIgnored private var latestRawGaze: Double?
     @ObservationIgnored private var measuredFPS: Double = 0
     @ObservationIgnored private var latestPipeline = PipelineSnapshot()
-    @ObservationIgnored private var liveTimer: Timer?
-    @ObservationIgnored private var previousSample: LiveSample?
+    @ObservationIgnored private var latestPipelineTime: TimeInterval = 0
+    @ObservationIgnored private var latestLiveStats = LiveStats()
+    @ObservationIgnored private var historyBuffer = PerformanceHistory()
+    @ObservationIgnored private var sampler: Timer?
+    @ObservationIgnored private var previousSample: CPUSample?
+    @ObservationIgnored private let mainThreadPort = CPUClock.currentThreadPort()
+    @ObservationIgnored private var trackingCPUAverage: Double?
+    @ObservationIgnored private var appliedHz: Double = 0
+    @ObservationIgnored private var appliedDetectionInterval = 0
     @ObservationIgnored private let launchTime = CACurrentMediaTime()
     @ObservationIgnored private var processedFrames = 0
     @ObservationIgnored private var rateDurations: [TrackingRate: TimeInterval] = [:]
@@ -161,11 +293,20 @@ final class AppModel {
     @ObservationIgnored private var frameCount = 0
     @ObservationIgnored private var fpsWindowStart: TimeInterval = 0
     @ObservationIgnored private var permissionTimer: Timer?
+    @ObservationIgnored private var inputWatchTimer: Timer?
     @ObservationIgnored private var deviceObservers: [NSObjectProtocol] = []
 
     private var cameraShouldRun: Bool {
-        isEnabled && (placementSource == .gaze || isCalibrating)
+        isEnabled && (placementSource == .gaze || isCalibrating) && (cameraPause == nil || isCalibrating)
     }
+
+    private var cameraRunning: Bool {
+        if case .running = cameraStatus { return cameraShouldRun }
+        return false
+    }
+
+    /// 실시간 값을 SwiftUI 로 흘려보낼지
+    private var publishesLiveValues: Bool { isMenuVisible || isSettingsVisible }
 
     init() {
         let defaults = UserDefaults.standard
@@ -174,15 +315,26 @@ final class AppModel {
             Keys.follow: true,
             Keys.overlay: false,
             Keys.source: PlacementSource.gaze.rawValue,
+            Keys.profile: PerformanceProfile.automatic.rawValue,
+            Keys.calibrationPoints: 5,
+            Keys.calibrationSeconds: 1.6,
+            Keys.adjustOverlay: true,
         ])
         isEnabled = defaults.bool(forKey: Keys.enabled)
         followWhileVisible = defaults.bool(forKey: Keys.follow)
         showOverlay = defaults.bool(forKey: Keys.overlay)
         placementSource = PlacementSource(rawValue: defaults.string(forKey: Keys.source) ?? "") ?? .gaze
         selectedCameraID = defaults.string(forKey: Keys.camera)
-        if let data = defaults.data(forKey: Keys.calibration) {
-            calibration = try? JSONDecoder().decode(GazeCalibration.self, from: data)
-        }
+        calibration = Self.load(GazeCalibration.self, Keys.calibration, from: defaults)
+        let profile = PerformanceProfile(rawValue: defaults.string(forKey: Keys.profile) ?? "") ?? .automatic
+        let custom = (Self.load(PerformanceLimits.self, Keys.customLimits, from: defaults) ?? .balanced).sanitized
+        self.profile = profile
+        customLimits = custom
+        policy = EffectivePolicy.resolve(selected: profile, custom: custom, power: PowerState())
+        adjustment = (Self.load(GazeAdjustment.self, Keys.adjustment, from: defaults) ?? GazeAdjustment()).sanitized
+        calibrationPointCount = defaults.integer(forKey: Keys.calibrationPoints).clamped(to: 3...9)
+        calibrationSeconds = defaults.double(forKey: Keys.calibrationSeconds).clamped(to: 0.8...4)
+        showOverlayWhileAdjusting = defaults.bool(forKey: Keys.adjustOverlay)
     }
 
     func start() {
@@ -193,44 +345,119 @@ final class AppModel {
         camera.onStats = { [weak self] snapshot in
             guard let self else { return }
             self.latestPipeline = snapshot
-            if self.isMenuVisible { self.pipeline = snapshot }
+            self.latestPipelineTime = CACurrentMediaTime()
+            if self.publishesLiveValues { self.pipeline = snapshot }
         }
         mover.targetProvider = { [weak self] in self?.placementTarget() }
         mover.followWhileVisible = followWhileVisible
         mover.onMove = { [weak self] message in
             self?.lastEvent = "\(Date().formatted(date: .omitted, time: .standard)) · \(message)"
         }
+        mover.onVisibilityChange = { [weak self] visible in
+            guard let self else { return }
+            self.notificationVisible = visible
+            self.applyCaptureRate()
+        }
+        powerMonitor.onChange = { [weak self] state in self?.powerChanged(state) }
+        powerMonitor.start()
+        power = powerMonitor.state
+        adjustmentChanged(from: adjustment)
 
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         refreshCameras()
         observeCameraDevices()
         if !accessibilityGranted { Permissions.requestAccessibility() }
         startPermissionPolling()
-        applyRunState()
+        startSampler()
+        powerChanged(power)
     }
 
     // MARK: - 동작
 
     func startCalibration() {
-        guard !isCalibrating, isEnabled else { return }
+        let count = calibrationPointCount
+        let plan = CalibrationPlan(
+            title: "시선 보정",
+            intro: "화면 위쪽에 점 \(count)개가 왼쪽부터 차례로 나타납니다.\n평소 작업할 때처럼 자연스럽게 바라보세요. 고개를 돌려도 괜찮습니다.",
+            targets: CalibrationPlan.evenTargets(count),
+            collectDuration: .milliseconds(Int(calibrationSeconds * 1000))
+        ) { [weak self] samples in
+            guard let model = GazeCalibration.fit(samples) else {
+                return .failure(CalibrationFailure(message: "학습에 실패했습니다. 고개와 눈을 조금 더 움직여 점을 바라보세요."))
+            }
+            Log.info("보정 완료 rmse=\(model.rmse) weights=\(model.weights) used=\(model.used)")
+            return .success(CalibrationOutcome(message: String(format: "평균 오차 약 %.1f%% (화면 폭 기준)", model.rmse * 100)) {
+                self?.applyCalibration(model)
+            })
+        }
+        runCalibration(plan)
+    }
+
+    /// 학습한 보정은 그대로 두고, 왼쪽 끝·가운데·오른쪽 끝 세 점으로 좌우 이동과 범위만 맞춘다
+    func startQuickAdjust() {
+        let targets = [0.04, 0.5, 0.96]
+        let gains = adjustment.featureGains
+        let model = calibration
+        let plan = CalibrationPlan(
+            title: "빠른 위치 맞춤",
+            intro: "점 3개(왼쪽 끝 · 가운데 · 오른쪽 끝)를 차례로 바라보세요.\n학습한 보정은 그대로 두고 좌우 이동과 범위만 다시 맞춥니다.",
+            targets: targets,
+            collectDuration: .milliseconds(1400)
+        ) { [weak self] samples in
+            func meanRaw(_ target: Double) -> Double? {
+                let raws = samples.filter { $0.target == target }
+                    .map { model?.predict($0.features, gains: gains) ?? DefaultGazeModel.predict($0.features, gains: gains) }
+                return raws.isEmpty ? nil : raws.reduce(0, +) / Double(raws.count)
+            }
+            guard let left = meanRaw(targets[0]), let center = meanRaw(targets[1]), let right = meanRaw(targets[2]) else {
+                return .failure(CalibrationFailure(message: "얼굴이 충분히 감지되지 않았습니다."))
+            }
+            Log.info(String(format: "빠른 위치 맞춤: 모델 출력 왼쪽 %.3f 가운데 %.3f 오른쪽 %.3f", left, center, right))
+            switch GazeAdjustment.fit(left: (targets[0], left), center: (targets[1], center), right: (targets[2], right)) {
+            case .success(let fit):
+                let message = String(format: "좌우 이동 %+.1f%% · 왼쪽 범위 ×%.2f · 오른쪽 범위 ×%.2f",
+                                     fit.offset * 100, fit.leftGain, fit.rightGain)
+                return .success(CalibrationOutcome(message: message) {
+                    guard let self else { return }
+                    var adjusted = self.adjustment
+                    adjusted.offset = fit.offset
+                    adjusted.leftGain = fit.leftGain
+                    adjusted.rightGain = fit.rightGain
+                    self.adjustment = adjusted
+                })
+            case .failure(let error):
+                return .failure(CalibrationFailure(message: error.message))
+            }
+        }
+        runCalibration(plan)
+    }
+
+    private func runCalibration(_ plan: CalibrationPlan) {
+        guard !isCalibrating, isEnabled, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         isCalibrating = true
         applyRunState()
-        updateAdaptiveStride(faceFound: faceDetected, now: CACurrentMediaTime())
+        updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
         overlay.setVisible(false)
 
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        calibrator.begin(on: screen) { [weak self] result in
+        calibrator.begin(on: screen, plan: plan) { [weak self] outcome in
             guard let self else { return }
             self.isCalibrating = false
-            self.updateAdaptiveStride(faceFound: self.faceDetected, now: CACurrentMediaTime())
-            if let result {
-                self.calibration = result
-                if let data = try? JSONEncoder().encode(result) { self.defaults.set(data, forKey: Keys.calibration) }
-                self.filter.reset()
-                self.lastEvent = String(format: "보정 완료 · 평균 오차 %.1f%%", result.rmse * 100)
+            if let outcome {
+                outcome.apply()
+                self.lastEvent = "\(plan.title) 완료 · \(outcome.message)"
             }
+            self.filter.reset()
+            self.zoneSnapper.reset()
             self.applyRunState()
+            self.updateTrackingRate(faceFound: self.faceDetected, now: CACurrentMediaTime())
         }
+    }
+
+    private func applyCalibration(_ model: GazeCalibration) {
+        calibration = model
+        save(model, Keys.calibration)
+        // 이전 보정에 맞춰 손본 좌우 이동·범위는 새 보정에는 맞지 않는다
+        if !adjustment.isPositionDefault { adjustment = adjustment.resettingPosition() }
     }
 
     func resetCalibration() {
@@ -238,6 +465,24 @@ final class AppModel {
         defaults.removeObject(forKey: Keys.calibration)
         filter.reset()
         lastEvent = "보정 초기화 — 기본 추정식 사용"
+    }
+
+    func resetAdjustment() {
+        adjustment = GazeAdjustment()
+        lastEvent = "수동 보정값 초기화"
+    }
+
+    /// UI 에서 제한값을 바꾸면 지금 적용 중인 값에서 시작해 사용자 지정 프로필로 전환한다
+    func editLimits(_ edit: (inout PerformanceLimits) -> Void) {
+        var limits = policy.limits
+        edit(&limits)
+        customLimits = limits.sanitized
+        if profile != .custom { profile = .custom }
+    }
+
+    func openSettings(_ tab: SettingsTab) {
+        settingsTab = tab
+        settingsWindow.show()
     }
 
     /// `delay` 초 뒤 GazeNotification 이름으로 테스트 알림. 그 사이 원하는 곳을 바라보면 된다.
@@ -303,11 +548,14 @@ final class AppModel {
                    f.yaw.map { String(format: "%.3f", $0) } ?? "nil")
         } ?? "none"
         let p = latestPipeline
-        Log.info(String(format: "STATUS pipeline 수신 %.1f/s 처리 %.1f/s 랜드마크 %.1f/s | 검출 %.1fms(CPU %.1f) 랜드마크 %.1fms(CPU %.1f) 특징 %.2fms | 파이프라인 CPU %.1f%%",
-                        p.receivedFPS, p.processedFPS, p.landmarksFPS, p.detectWallMs, p.detectCPUms,
-                        p.landmarksWallMs, p.landmarksCPUms, p.featuresCPUms, p.cpuPercent))
-        Log.info("STATUS enabled=\(isEnabled) source=\(placementSource.rawValue) camera=\(cameraStatus) "
-            + "face=\(faceDetected) gazeX=\(gaze) fps=\(String(format: "%.1f", measuredFPS)) rate=\(trackingRate) menu=\(isMenuVisible) ax=\(accessibilityGranted) "
+        let cpu = historyBuffer.samples.last
+        Log.info(String(format: "STATUS pipeline 수신 %.1f/s 처리 %.1f/s (목표 %.1f) 검출 %.1f/s 랜드마크 %.1f/s | 검출 %.1fms(CPU %.1f) 랜드마크 %.1fms(CPU %.1f) 특징 %.2fms | CPU 전체 %.1f%% 추적 %.1f%% 메인 %.1f%%",
+                        p.receivedFPS, p.processedFPS, appliedHz, p.detectFPS, p.landmarksFPS, p.detectWallMs, p.detectCPUms,
+                        p.landmarksWallMs, p.landmarksCPUms, p.featuresCPUms,
+                        cpu?.processCPU ?? 0, cpu?.trackingCPU ?? 0, cpu?.mainCPU ?? 0))
+        Log.info("STATUS enabled=\(isEnabled) source=\(placementSource.rawValue) camera=\(cameraStatus) pause=\(cameraPause.map { "\($0)" } ?? "none") "
+            + "profile=\(policy.applied.rawValue)(\(policy.reason ?? "-")) governor=\(String(format: "%.2f", governorScale)) "
+            + "face=\(faceDetected) gazeX=\(gaze) fps=\(String(format: "%.1f", measuredFPS)) rate=\(trackingRate) menu=\(isMenuVisible) settings=\(isSettingsVisible) ax=\(accessibilityGranted) "
             + "calibrated=\(calibration != nil) mover=\(mover.isRunning) features[\(features)]")
     }
 
@@ -320,10 +568,13 @@ final class AppModel {
 
     private func applyRunState() {
         if cameraShouldRun {
+            if !cameraRunning { lastFaceTime = CACurrentMediaTime() }
             startCameraIfAuthorized()
         } else {
             camera.stop()
             faceDetected = false
+            latestPipeline = PipelineSnapshot()
+            if publishesLiveValues { pipeline = latestPipeline }
         }
 
         if isEnabled && accessibilityGranted {
@@ -331,6 +582,7 @@ final class AppModel {
         } else {
             mover.stop()
         }
+        mover.isPaused = power.screenUnavailable
         updateOverlayVisibility()
     }
 
@@ -348,9 +600,11 @@ final class AppModel {
     }
 
     private func updateOverlayVisibility() {
-        overlay.setVisible(isEnabled && showOverlay && placementSource == .gaze && !isCalibrating)
+        let wanted = isEnabled && placementSource == .gaze && !isCalibrating && cameraPause == nil
+            && (showOverlay || (isAdjusting && showOverlayWhileAdjusting))
+        overlay.setVisible(wanted)
         overlay.update(normalizedX: latestGaze, faceDetected: faceDetected)
-        updateAdaptiveStride(faceFound: faceDetected, now: CACurrentMediaTime())
+        updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
     }
 
     private func placementTarget() -> Double? {
@@ -371,7 +625,7 @@ final class AppModel {
                 faceDetected = false
                 overlay.update(normalizedX: latestGaze, faceDetected: false)
             }
-            updateAdaptiveStride(faceFound: false, now: now)
+            updateTrackingRate(faceFound: false, now: now)
             return
         }
 
@@ -381,81 +635,220 @@ final class AppModel {
         // 눈 깜빡임 등으로 동공이 빠진 프레임은 직전 값으로 채운다
         if let pupil = features.pupilOffset { lastPupilOffset = pupil } else { features.pupilOffset = lastPupilOffset }
 
-        let raw = calibration?.predict(features.vector) ?? DefaultGazeModel.predict(features)
-        let smoothed = filter.filter(raw.clamped(to: -0.1...1.1), timestamp: features.timestamp)
-        latestGaze = smoothed.clamped(to: 0...1)
-        if isMenuVisible {
+        // 모델 출력 → 손으로 맞춘 이동·범위 → 스무딩 → 구역 맞춤
+        let gains = adjustment.featureGains
+        let raw = calibration?.predict(features.vector, gains: gains) ?? DefaultGazeModel.predict(features.vector, gains: gains)
+        let adjusted = adjustment.mapPosition(raw)
+        let smoothed = filter.filter(adjusted.clamped(to: -0.1...1.1), timestamp: features.timestamp)
+        var gaze = smoothed.clamped(to: 0...1)
+        if adjustment.zones > 1 { gaze = zoneSnapper.snap(gaze, zones: adjustment.zones) }
+        latestGaze = gaze
+        latestRawGaze = raw.clamped(to: 0...1)
+        if publishesLiveValues {
             gazeX = latestGaze
-            var breakdown = calibration?.breakdown(features) ?? DefaultGazeModel.breakdown(features)
-            breakdown.filtered = latestGaze ?? smoothed
+            rawGazeX = latestRawGaze
+            var breakdown = calibration?.breakdown(features, gains: gains) ?? DefaultGazeModel.breakdown(features, gains: gains)
+            breakdown.adjusted = adjusted
+            breakdown.filtered = gaze
             gazeBreakdown = breakdown
         }
         overlay.update(normalizedX: latestGaze, faceDetected: true)
-        updateAdaptiveStride(faceFound: true, now: features.timestamp)
+        updateTrackingRate(faceFound: true, now: features.timestamp)
     }
 
-    /// 상황별 추적 속도. 장치 fps 를 낮추면 캡처 비용까지 줄어든다.
-    ///
-    /// | 상태 | 장치 | 처리 |
-    /// | 보정 중·카메라 미리보기 | 10fps | 10fps |
-    /// | 얼굴 있음 | 5fps | 5fps |
-    /// | 시선이 3초 이상 멈춤 | 5fps | 2.5fps |
-    /// | 얼굴 없음 3초 이상 | 5fps | 1.7fps |
-    private func updateAdaptiveStride(faceFound: Bool, now: TimeInterval) {
+    private func adjustmentChanged(from old: GazeAdjustment) {
+        filter.minCutoff = adjustment.smoothing
+        filter.beta = adjustment.responsiveness
+        mover.followThreshold = adjustment.followThreshold
+        if old.zones != adjustment.zones { zoneSnapper.reset() }
+    }
+
+    /// 상황별 추적 속도 단계. 단계별 처리 횟수는 `PerformanceLimits` 가 정한다.
+    private func updateTrackingRate(faceFound: Bool, now: TimeInterval) {
+        let l = limits
         let rate: TrackingRate
-        if isCalibrating || isPreviewVisible {
+        if cameraPause != nil && !isCalibrating {
+            rate = .paused
+        } else if isCalibrating || isPreviewVisible || isAdjusting {
             rate = .live
         } else if !faceFound {
-            rate = now - lastFaceTime > 3 ? .away : trackingRate
+            let keep = trackingRate == .live || trackingRate == .paused ? .normal : trackingRate
+            rate = now - lastFaceTime > l.awayAfter ? .away : keep
         } else if let gaze = latestGaze, let anchor = motionAnchor, abs(gaze - anchor) < 0.06 {
-            rate = now - motionAnchorTime > 3 ? .still : .normal
+            rate = now - motionAnchorTime > l.stillAfter ? .still : .normal
         } else {
             motionAnchor = latestGaze
             motionAnchorTime = now
             rate = .normal
         }
-        guard rate != trackingRate else { return }
-        let changedAt = CACurrentMediaTime()
-        rateDurations[trackingRate, default: 0] += changedAt - rateSince
-        rateSince = changedAt
-        trackingRate = rate
-        camera.setCaptureRate(fps: rate.deviceFPS, stride: rate.stride)
+        if rate != trackingRate {
+            let changedAt = CACurrentMediaTime()
+            rateDurations[trackingRate, default: 0] += changedAt - rateSince
+            rateSince = changedAt
+            trackingRate = rate
+        }
+        applyCaptureRate()
     }
 
-    // MARK: - 1초마다 요약 (메뉴가 열려 있을 때만)
+    /// 단계별 처리 횟수 × CPU 상한 비율 → 카메라. 같은 값이면 아무것도 하지 않는다 (프레임마다 호출됨).
+    private func applyCaptureRate() {
+        guard trackingRate != .paused else { return }
+        let l = limits
+        var hz = trackingRate.baseHz(l)
+        if notificationVisible, l.boostWhileNotification, trackingRate == .normal || trackingRate == .still {
+            hz = max(hz, l.activeHz)
+        }
+        if trackingRate != .live { hz = max(0.2, hz * governorScale) }
+        let detection = trackingRate == .live ? 1 : l.detectionInterval
+        guard abs(hz - appliedHz) > 0.001 || detection != appliedDetectionInterval else { return }
+        appliedHz = hz
+        appliedDetectionInterval = detection
+        camera.setProcessing(hz: hz, detectionInterval: detection)
+        if publishesLiveValues { targetHz = hz }
+    }
 
-    private func startLiveStats() {
-        previousSample = LiveSample.now(mover: mover.status())
-        updateLiveStats()
+    private func applyPolicy() {
+        let next = EffectivePolicy.resolve(selected: profile, custom: customLimits, power: power)
+        guard next != policy else { return }
+        if next.applied != policy.applied || next.reason != policy.reason {
+            Log.info("성능 프로필: \(next.applied.title)" + (next.reason.map { " (\($0))" } ?? ""))
+        }
+        policy = next
+        mover.idleCheckHz = next.limits.notificationCheckHz
+        if next.limits.cpuLimit == 0 { governorScale = 1 }
+        if cameraPause == .absence, next.limits.cameraOffAfterAway == 0 { resumeCamera(reason: "자동으로 끄기 해제") }
+        updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
+    }
+
+    // MARK: - 전원 상태
+
+    private func powerChanged(_ state: PowerState) {
+        power = state
+        if state.screenUnavailable {
+            if cameraPause != .screen {
+                cameraPause = .screen
+                stopInputWatch()
+                Log.info("화면 꺼짐/잠김 — 카메라 끔")
+            }
+        } else if cameraPause == .screen {
+            // 잠금을 풀었다면 사람이 돌아온 것 → 자리 비움으로 꺼 둔 것도 함께 해제
+            cameraPause = nil
+            Log.info("화면 켜짐 — 카메라 다시 켬")
+        }
+        applyPolicy()
+        mover.idleCheckHz = limits.notificationCheckHz
+        applyRunState()
+        updateTrackingRate(faceFound: faceDetected, now: CACurrentMediaTime())
+    }
+
+    /// 자리 비움이 `cameraOffAfterAway` 분 넘게 이어지면 카메라를 끄고 입력을 기다린다
+    private func checkAbsence(now: TimeInterval) {
+        let minutes = limits.cameraOffAfterAway
+        guard cameraPause == nil, minutes > 0, cameraRunning, trackingRate == .away,
+              now - lastFaceTime > minutes * 60 else { return }
+        cameraPause = .absence
+        Log.info("자리 비움 \(Int(minutes))분 — 카메라 끔 (입력이 생기면 다시 켬)")
+        lastEvent = "오래 자리를 비워 카메라를 껐습니다 — 키보드·마우스를 쓰면 다시 켭니다"
+        applyRunState()
+        updateTrackingRate(faceFound: false, now: now)
+        startInputWatch()
+    }
+
+    private func startInputWatch() {
+        stopInputWatch()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateLiveStats() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if Self.secondsSinceLastInput() < 1.5 { self.resumeCamera(reason: "입력 감지") }
+            }
         }
-        timer.tolerance = 0.1
+        timer.tolerance = 0.3
         RunLoop.main.add(timer, forMode: .common)
-        liveTimer = timer
+        inputWatchTimer = timer
     }
 
-    private func stopLiveStats() {
-        liveTimer?.invalidate()
-        liveTimer = nil
+    private func stopInputWatch() {
+        inputWatchTimer?.invalidate()
+        inputWatchTimer = nil
     }
 
-    private func updateLiveStats() {
-        let now = CACurrentMediaTime()
-        let moverStatus = mover.status()
-        let sample = LiveSample.now(mover: moverStatus)
-        var stats = LiveStats()
-        if let previous = previousSample, sample.time > previous.time {
-            let dt = sample.time - previous.time
-            stats.processCPUPercent = (sample.cpuSeconds - previous.cpuSeconds) / dt * 100
-            stats.windowChecksPerSecond = Double(sample.mover.windowChecks - previous.mover.windowChecks) / dt
-            stats.axCallsPerSecond = Double(sample.mover.axCalls - previous.mover.axCalls) / dt
-            stats.movesPerSecond = Double(sample.mover.moves - previous.mover.moves) / dt
-            stats.ticksPerSecond = Double(sample.mover.ticks - previous.mover.ticks) / dt
+    private func resumeCamera(reason: String) {
+        guard cameraPause == .absence else { return }
+        stopInputWatch()
+        cameraPause = nil
+        Log.info("카메라 다시 켬 (\(reason))")
+        applyRunState()
+        updateTrackingRate(faceFound: false, now: CACurrentMediaTime())
+    }
+
+    private static func secondsSinceLastInput() -> TimeInterval {
+        let types: [CGEventType] = [.mouseMoved, .leftMouseDown, .rightMouseDown, .otherMouseDown,
+                                    .keyDown, .scrollWheel, .leftMouseDragged, .flagsChanged]
+        return types.map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? .infinity
+    }
+
+    // MARK: - 1초마다: 성능 기록, CPU 상한, 메뉴 요약
+
+    private struct CPUSample {
+        var time: CFTimeInterval
+        var process: Double
+        var main: Double
+        var mover: MoverStatus
+    }
+
+    private func startSampler() {
+        previousSample = CPUSample(time: CACurrentMediaTime(), process: CPUClock.process(),
+                                   main: CPUClock.thread(mainThreadPort), mover: mover.status())
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recordSample() }
         }
-        previousSample = sample
-        stats.mover = moverStatus
+        timer.tolerance = 0.15
+        RunLoop.main.add(timer, forMode: .common)
+        sampler = timer
+    }
 
+    private func recordSample() {
+        let now = CACurrentMediaTime()
+        let current = CPUSample(time: now, process: CPUClock.process(), main: CPUClock.thread(mainThreadPort),
+                                mover: mover.status())
+        guard let previous = previousSample, now > previous.time else {
+            previousSample = current
+            return
+        }
+        previousSample = current
+        let dt = now - previous.time
+        let processCPU = (current.process - previous.process) / dt * 100
+        let mainCPU = (current.main - previous.main) / dt * 100
+        let trackingCPU = max(0, processCPU - mainCPU)
+        func perSecond(_ value: (MoverStatus) -> Int) -> Double {
+            Double(value(current.mover) - value(previous.mover)) / dt
+        }
+
+        updateGovernor(trackingCPU: trackingCPU)
+
+        let pipelineFresh = cameraRunning && now - latestPipelineTime < 2.5
+        let p = pipelineFresh ? latestPipeline : PipelineSnapshot()
+        let sample = { (id: Int) in
+            PerformanceSample(
+                id: id, time: Date(), processCPU: processCPU, trackingCPU: trackingCPU, mainCPU: mainCPU,
+                processedHz: p.processedFPS, detectHz: p.detectFPS, receivedFPS: p.receivedFPS,
+                targetHz: self.cameraRunning ? self.appliedHz : 0,
+                detectMs: p.detectWallMs, landmarksMs: p.landmarksWallMs,
+                notificationChecksPerSecond: perSecond(\.windowChecks), axCallsPerSecond: perSecond(\.axCalls),
+                rate: self.trackingRate, profile: self.policy.applied, governorScale: self.governorScale)
+        }
+        // 시작 직후 10초는 Vision 모델 로드(일회성)로 CPU 가 튀어 그래프 눈금을 망가뜨리므로 기록하지 않는다
+        if now - launchTime > 10 { historyBuffer.append(sample) }
+
+        var stats = LiveStats()
+        stats.processCPUPercent = processCPU
+        stats.trackingCPUPercent = trackingCPU
+        stats.mainCPUPercent = mainCPU
+        stats.windowChecksPerSecond = perSecond(\.windowChecks)
+        stats.axCallsPerSecond = perSecond(\.axCalls)
+        stats.movesPerSecond = perSecond(\.moves)
+        stats.ticksPerSecond = perSecond(\.ticks)
+        stats.mover = current.mover
         let uptime = now - launchTime
         stats.uptime = uptime
         stats.averageProcessedFPS = uptime > 0 ? Double(processedFrames) / uptime : 0
@@ -463,7 +856,46 @@ final class AppModel {
         durations[trackingRate, default: 0] += now - rateSince
         let total = durations.values.reduce(0, +)
         stats.rateShare = total > 0 ? durations.mapValues { $0 / total } : [:]
-        liveStats = stats
+        latestLiveStats = stats
+
+        if isMenuVisible { liveStats = stats }
+        if isSettingsVisible { history = historyBuffer.samples }
+        if publishesLiveValues, !pipelineFresh { pipeline = p }
+        checkAbsence(now: now)
+    }
+
+    /// 카메라·AI CPU(메인 스레드 제외)가 상한을 넘으면 처리 횟수를 비례해 줄이고, 여유가 생기면 천천히 되돌린다.
+    /// 보정·미리보기(실시간) 중에는 적용하지 않는다.
+    private func updateGovernor(trackingCPU: Double) {
+        let limit = limits.cpuLimit
+        guard limit > 0, cameraRunning, trackingRate != .live, trackingRate != .paused else {
+            trackingCPUAverage = nil
+            if governorScale != 1, limit == 0 || !cameraRunning {
+                governorScale = 1
+                applyCaptureRate()
+            }
+            return
+        }
+        let average = trackingCPUAverage.map { $0 * 0.6 + trackingCPU * 0.4 } ?? trackingCPU
+        trackingCPUAverage = average
+        var scale = governorScale
+        if average > limit {
+            scale = max(0.05, scale * max(0.5, limit / average))
+        } else if average < limit * 0.7 {
+            scale = min(1, scale * 1.15)
+        }
+        guard abs(scale - governorScale) > 0.005 else { return }
+        governorScale = scale
+        applyCaptureRate()
+    }
+
+    /// 메뉴·설정 창이 열릴 때 그동안 쌓인 값을 한 번에 넘긴다
+    private func publishLiveValues() {
+        gazeX = latestGaze
+        rawGazeX = latestRawGaze
+        pipeline = latestPipeline
+        targetHz = appliedHz
+        history = historyBuffer.samples
     }
 
     /// 앱 종료 시 알림 창을 원래 위치로 되돌리고 카메라를 끈다.
@@ -503,9 +935,11 @@ final class AppModel {
         }
     }
 
-    /// 손쉬운 사용 권한은 변경 알림이 없어서 주기적으로 확인한다.
+    /// 손쉬운 사용 권한은 변경 알림이 없어서 주기적으로 확인한다 (허용된 뒤에는 드물게).
     private func startPermissionPolling() {
-        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+        permissionTimer?.invalidate()
+        let interval: TimeInterval = accessibilityGranted ? 10 : 1.5
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let trusted = Permissions.accessibilityTrusted
@@ -513,11 +947,23 @@ final class AppModel {
                     self.accessibilityGranted = trusted
                     Log.info("손쉬운 사용 권한 변경: \(trusted)")
                     self.applyRunState()
+                    self.startPermissionPolling()
                 }
             }
         }
+        timer.tolerance = interval * 0.2
         RunLoop.main.add(timer, forMode: .common)
         permissionTimer = timer
+    }
+
+    // MARK: - 저장
+
+    private static func load<T: Decodable>(_ type: T.Type, _ key: String, from defaults: UserDefaults) -> T? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(T.self, from: $0) }
+    }
+
+    private func save<T: Encodable>(_ value: T, _ key: String) {
+        if let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: key) }
     }
 }
 
@@ -531,37 +977,40 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-/// 추적 속도 단계 (장치 fps, 처리 간격)
+/// 추적 속도 단계. 단계별 처리 횟수는 `PerformanceLimits` 에서 정한다.
 enum TrackingRate: CaseIterable {
-    case live, normal, still, away
+    case live, normal, still, away, paused
+
+    /// 보정·미리보기·보정 조정 중 처리 횟수/s (CPU 상한·프로필과 무관)
+    static let liveHz: Double = 10
 
     var title: String {
         switch self {
         case .live: "실시간"
-        case .normal: "평소"
-        case .still: "절전"
+        case .normal: "움직임"
+        case .still: "머묾"
         case .away: "자리 비움"
+        case .paused: "카메라 꺼짐"
         }
     }
 
     var reason: String {
         switch self {
-        case .live: "보정 중이거나 카메라 미리보기를 펼침"
+        case .live: "보정 중이거나 카메라 미리보기·보정 조정 화면을 보는 중"
         case .normal: "얼굴이 보이고 시선이 움직이는 중"
-        case .still: "시선이 3초 넘게 한곳에 머묾"
-        case .away: "얼굴이 3초 넘게 보이지 않음"
+        case .still: "시선이 한곳에 머묾"
+        case .away: "얼굴이 보이지 않음"
+        case .paused: "화면이 꺼졌거나 오래 자리를 비움"
         }
     }
 
-    /// 실제 Vision 처리 횟수/s
-    var processingFPS: Double { deviceFPS / Double(stride) }
-
-    var deviceFPS: Double { self == .live ? 10 : 5 }
-    var stride: Int {
+    func baseHz(_ limits: PerformanceLimits) -> Double {
         switch self {
-        case .live, .normal: 1
-        case .still: 2
-        case .away: 3
+        case .live: Self.liveHz
+        case .normal: limits.activeHz
+        case .still: limits.stillHz
+        case .away: limits.awayHz
+        case .paused: 0
         }
     }
 }
@@ -570,6 +1019,10 @@ enum TrackingRate: CaseIterable {
 struct LiveStats: Equatable {
     /// GazeNotification 프로세스 전체 CPU (코어 1개 = 100%)
     var processCPUPercent: Double = 0
+    /// 메인 스레드를 뺀 CPU (카메라·Vision·Neural Engine 드라이버)
+    var trackingCPUPercent: Double = 0
+    /// 메인 스레드 CPU (UI·알림 감시)
+    var mainCPUPercent: Double = 0
     var ticksPerSecond: Double = 0
     var windowChecksPerSecond: Double = 0
     var axCallsPerSecond: Double = 0
@@ -580,19 +1033,4 @@ struct LiveStats: Equatable {
     var averageProcessedFPS: Double = 0
     /// 실행 후 각 속도 단계에 머문 시간 비율
     var rateShare: [TrackingRate: Double] = [:]
-}
-
-/// 초당 값 계산용 누적 샘플
-private struct LiveSample {
-    var time: CFTimeInterval
-    var cpuSeconds: Double
-    var mover: MoverStatus
-
-    static func now(mover: MoverStatus) -> LiveSample {
-        var usage = rusage()
-        getrusage(RUSAGE_SELF, &usage)
-        let cpu = Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1e6
-            + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1e6
-        return LiveSample(time: CACurrentMediaTime(), cpuSeconds: cpu, mover: mover)
-    }
 }

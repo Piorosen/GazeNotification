@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 개발용: 터미널에서 분산 알림으로 앱을 조작한다 (`scripts/debug.sh test|dump|status`).
+/// 개발용: 터미널에서 분산 알림으로 앱을 조작한다 (`scripts/debug.sh test|dump|status|snapshot|settings-*`).
 /// Debug 빌드는 항상, Release 빌드는 `defaults write party.udon.GazeNotification debugCommands -bool YES` 일 때만 켜진다.
 @MainActor
 enum DebugCommands {
@@ -22,7 +22,9 @@ enum DebugCommands {
             ("dump", { $0.dumpAccessibilityTree(reveal: false) }),
             ("status", { $0.logStatus() }),
             ("snapshot", { snapshotMenu(model: $0) }),
-        ]
+        ] + SettingsTab.allCases.map { tab in
+            ("settings-\(tab.rawValue)", { snapshotSettings(model: $0, tab: tab) })
+        }
         let center = DistributedNotificationCenter.default()
         for (name, handler) in handlers {
             center.addObserver(forName: Notification.Name(prefix + name), object: nil, queue: .main) { [weak model] _ in
@@ -37,6 +39,53 @@ enum DebugCommands {
 }
 
 extension DebugCommands {
+    /// 설정 창의 탭 내용을 화면 밖 창에 그려 ~/Library/Logs/GazeNotification/settings-<탭>.png 로 저장 (레이아웃 확인용).
+    /// 그리는 동안은 설정 창이 열린 것처럼 실시간 값을 흘려보낸다.
+    static func snapshotSettings(model: AppModel, tab: SettingsTab) {
+        let wasVisible = model.isSettingsVisible
+        let previousTab = model.settingsTab
+        model.settingsTab = tab
+        model.isSettingsVisible = true
+        let content: AnyView = switch tab {
+        case .performance: AnyView(PerformanceView(model: model))
+        case .limits: AnyView(LimitsView(model: model))
+        case .calibration: AnyView(CalibrationAdjustView(model: model))
+        }
+        render(content, name: "settings-\(tab.rawValue).png", width: 760, height: 1400, delay: 4) {
+            if !wasVisible {
+                model.isSettingsVisible = false
+                model.settingsTab = previousTab
+            }
+        }
+    }
+
+    private static func render(_ content: AnyView, name: String, width: CGFloat, height: CGFloat,
+                               delay: TimeInterval, completion: @escaping @MainActor () -> Void) {
+        let hosting = NSHostingView(rootView: content.frame(width: width, height: height)
+            .background(Color(nsColor: .windowBackgroundColor)))
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: width, height: height),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                hosting.layoutSubtreeIfNeeded()
+                if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                    hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                    if let data = rep.representation(using: .png, properties: [:]) {
+                        let url = Log.directory.appendingPathComponent(name)
+                        try? data.write(to: url)
+                        Log.info("스냅샷 저장: \(url.path)")
+                    }
+                }
+                window.orderOut(nil)
+                window.contentView = nil
+                completion()
+            }
+        }
+    }
+
     /// 메뉴 패널을 화면 밖 창에 그려 ~/Library/Logs/GazeNotification/menu.png 로 저장 (레이아웃 확인용)
     static func snapshotMenu(model: AppModel) {
         let root = MenuView(model: model).background(Color(nsColor: .windowBackgroundColor))

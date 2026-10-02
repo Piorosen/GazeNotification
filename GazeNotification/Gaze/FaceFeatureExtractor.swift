@@ -7,11 +7,20 @@ import Vision
 /// Vision 으로 얼굴 → 랜드마크(눈, 동공, 코)를 검출해 `FaceFeatures` 로 변환.
 /// 비디오 큐 한 곳에서만 사용한다 (스레드 안전하지 않음).
 ///
-/// 신경망 단계는 Neural Engine(없으면 GPU)에 고정해 CPU 사용을 줄인다.
+/// - 신경망 단계는 Neural Engine(없으면 GPU)에 고정해 CPU 사용을 줄인다.
+/// - 전체 얼굴 검출은 `detectionInterval` 번에 1번만 한다. 그 사이 프레임은 직전 얼굴 상자를
+///   눈 위치에 맞춰 옮겨 랜드마크 요청에 바로 넘긴다 (M4 Max 측정: 검출 1회 ≈ 프로세스 CPU 9ms + Neural Engine 대기 11ms).
+///   랜드마크 신뢰도가 낮거나 얼굴이 화면 밖으로 나가면 그 프레임에서 바로 다시 검출한다.
+///   머리 yaw 는 얼굴 검출만 계산하므로(랜드마크 결과는 넘긴 값을 그대로 복사) 추적 프레임은 마지막 검출 yaw 를 쓴다.
+///   대신 코 방향이 검출 때보다 크게 바뀌면(고개를 돌림) 다음 프레임에서 바로 다시 검출한다.
+///   (코 방향 변화로 yaw 를 보정해 보면 코 값의 프레임 간 흔들림 때문에 오히려 오차가 커졌다: 그대로 0.6~3° vs 보정 1.4~9.7°)
 final class FaceFeatureExtractor {
     /// 단계별 실행 장치 (예: "VNComputeStageMain:ANE")
     let detectionDevice: String
     let landmarksDevice: String
+
+    /// N 번 처리마다 1번 전체 얼굴 검출 (1 = 매번)
+    var detectionInterval = 1
 
     private let rectanglesRequest = VNDetectFaceRectanglesRequest()
     private let landmarksRequest: VNDetectFaceLandmarksRequest = {
@@ -19,6 +28,25 @@ final class FaceFeatureExtractor {
         request.constellation = .constellation76Points
         return request
     }()
+
+    /// 마지막 검출 결과와, 그때 얼굴 상자에 대한 눈의 상대 위치
+    private struct TrackedFace {
+        var detection: VNFaceObservation
+        /// 두 눈 중점의 상자 안 상대 위치 (0...1)
+        var eyeAnchor: CGPoint
+        /// 눈 사이 거리 ÷ 상자 폭
+        var eyeSpan: CGFloat
+        /// 지금 쓰는 (옮겨진) 상자
+        var current: VNFaceObservation
+        /// 검출 프레임의 코 방향
+        var noseOffset: Double
+    }
+    private var tracked: TrackedFace?
+    /// 추적 중 코 방향이 검출 때보다 이만큼 바뀌면 다음 프레임에서 다시 검출 (화면 폭 기준 약 1/10)
+    private let redetectNoseChange = 0.06
+    private var framesSinceDetection = 0
+    /// 추적 중인 프레임에서 이보다 랜드마크 신뢰도가 낮으면 다시 검출
+    private let minTrackingConfidence: Float = 0.5
 
     init() {
         detectionDevice = Self.preferNeuralEngine(rectanglesRequest)
@@ -46,37 +74,103 @@ final class FaceFeatureExtractor {
     /// 눈 높이/폭 비율이 이보다 작으면 감은 것으로 보고 동공 값을 버린다.
     private let minEyeOpenness: CGFloat = 0.12
 
-    /// 한 프레임 처리: ① 얼굴 검출 → ② 랜드마크 → ③ 특징 계산. 단계별 소요 시간도 함께 돌려준다.
+    /// 한 프레임 처리: ① 얼굴 검출(또는 추적) → ② 랜드마크 → ③ 특징 계산. 단계별 소요 시간도 함께 돌려준다.
     func extract(from pixelBuffer: CVPixelBuffer, timestamp: TimeInterval) -> Extraction {
         var timing = StageTiming()
         let imageSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
                                height: CVPixelBufferGetHeight(pixelBuffer))
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
 
-        // ① 얼굴 검출: 이미지 전체에서 얼굴 상자 + 머리 방향(yaw/roll/pitch)
-        let detected: Bool = timing.measure(\.detect) { (try? handler.perform([rectanglesRequest])) != nil }
-        // 가장 큰(=가장 가까운) 얼굴 하나만 추적
-        guard detected,
-              let face = rectanglesRequest.results?.max(by: { $0.boundingBox.area < $1.boundingBox.area }) else {
-            return Extraction(features: nil, timing: timing)
+        // ① 얼굴 검출: 이미지 전체에서 얼굴 상자 + 머리 방향(yaw/roll/pitch). 가장 큰(=가장 가까운) 얼굴 하나만 추적
+        func detect() -> VNFaceObservation? {
+            framesSinceDetection = 0
+            let ok: Bool = timing.measure(\.detect) { (try? handler.perform([rectanglesRequest])) != nil }
+            guard ok else { return nil }
+            return rectanglesRequest.results?.max(by: { $0.boundingBox.area < $1.boundingBox.area })
         }
 
-        // ② 랜드마크: 검출 결과를 넘겨 얼굴 검출을 다시 하지 않고, 얼굴 상자 안에서 76개 점만 찾는다
-        landmarksRequest.inputFaceObservations = [face]
-        let landmarked: Bool = timing.measure(\.landmarks) { (try? handler.perform([landmarksRequest])) != nil }
-        guard landmarked, let observation = landmarksRequest.results?.first else {
+        // ② 랜드마크: 얼굴 상자를 넘겨 그 안에서 76개 점만 찾는다
+        func landmarks(in face: VNFaceObservation) -> VNFaceObservation? {
+            landmarksRequest.inputFaceObservations = [face]
+            let ok: Bool = timing.measure(\.landmarks) { (try? handler.perform([landmarksRequest])) != nil }
+            return ok ? landmarksRequest.results?.first : nil
+        }
+
+        var detection: VNFaceObservation?
+        var observation: VNFaceObservation?
+        if let tracked, framesSinceDetection + 1 < detectionInterval {
+            framesSinceDetection += 1
+            if let result = landmarks(in: tracked.current),
+               (result.landmarks?.confidence ?? 0) >= minTrackingConfidence {
+                observation = result
+            }
+        }
+        if observation == nil {
+            // 검출 차례이거나 추적이 놓침
+            guard let face = detect() else {
+                tracked = nil
+                return Extraction(features: nil, timing: timing)
+            }
+            detection = face
+            observation = landmarks(in: face)
+        }
+        guard let observation else {
+            tracked = nil
             return Extraction(features: nil, timing: timing)
         }
 
         // ③ 특징 계산 (CPU)
-        let features = timing.measure(\.features) {
-            self.features(from: observation, face: face, imageSize: imageSize, timestamp: timestamp)
+        let computed = timing.measure(\.features) {
+            self.features(from: observation, face: detection ?? tracked?.detection ?? observation,
+                          imageSize: imageSize, timestamp: timestamp)
         }
-        return Extraction(features: features, timing: timing)
+        guard let computed else {
+            tracked = nil
+            return Extraction(features: nil, timing: timing)
+        }
+        if detection == nil, let tracked, abs(computed.features.noseOffset - tracked.noseOffset) > redetectNoseChange {
+            framesSinceDetection = detectionInterval
+        }
+        updateTracking(detection: detection, features: computed.features, eyes: computed.eyes, imageSize: imageSize)
+        return Extraction(features: computed.features, timing: timing)
+    }
+
+    /// 검출한 프레임에서는 상자와 눈의 관계를 기억하고, 추적 프레임에서는 그 관계대로 상자를 눈에 맞춰 옮긴다.
+    private func updateTracking(detection: VNFaceObservation?, features: FaceFeatures, eyes: EyeGeometry, imageSize: CGSize) {
+        let eyeMid = CGPoint(x: eyes.mid.x / imageSize.width, y: eyes.mid.y / imageSize.height)
+        let span = eyes.interocular / imageSize.width
+        if let detection {
+            let box = detection.boundingBox
+            guard box.width > 0, box.height > 0 else { tracked = nil; return }
+            tracked = TrackedFace(detection: detection,
+                                  eyeAnchor: CGPoint(x: (eyeMid.x - box.minX) / box.width, y: (eyeMid.y - box.minY) / box.height),
+                                  eyeSpan: span / box.width, current: detection, noseOffset: features.noseOffset)
+            return
+        }
+        guard var tracked, tracked.eyeSpan > 0 else { return }
+        let width = span / tracked.eyeSpan
+        let height = width * tracked.detection.boundingBox.height / max(tracked.detection.boundingBox.width, 1e-6)
+        let box = CGRect(x: eyeMid.x - tracked.eyeAnchor.x * width, y: eyeMid.y - tracked.eyeAnchor.y * height,
+                         width: width, height: height)
+        // 상자가 이미지 밖으로 많이 나가면 다음 프레임에서 다시 검출
+        guard box.width > 0.02, box.intersection(CGRect(x: 0, y: 0, width: 1, height: 1)).area > box.area * 0.7 else {
+            self.tracked = nil
+            return
+        }
+        let d = tracked.detection
+        tracked.current = VNFaceObservation(requestRevision: d.requestRevision, boundingBox: box,
+                                            roll: d.roll, yaw: d.yaw, pitch: d.pitch)
+        self.tracked = tracked
+    }
+
+    private struct EyeGeometry {
+        /// 두 눈 중점 (이미지 픽셀, 원점 왼쪽 아래)
+        var mid: CGPoint
+        var interocular: CGFloat
     }
 
     private func features(from observation: VNFaceObservation, face: VNFaceObservation,
-                          imageSize: CGSize, timestamp: TimeInterval) -> FaceFeatures? {
+                          imageSize: CGSize, timestamp: TimeInterval) -> (features: FaceFeatures, eyes: EyeGeometry)? {
         guard let landmarks = observation.landmarks else { return nil }
 
         func points(_ region: VNFaceLandmarkRegion2D?) -> [CGPoint]? {
@@ -121,14 +215,16 @@ final class FaceFeatureExtractor {
             pupilOffsets.append(Double((level(pupil).x - center.x) / width))
         }
 
-        return FaceFeatures(
+        let features = FaceFeatures(
             timestamp: timestamp,
             faceX: Double(observation.boundingBox.midX),
             faceWidth: Double(observation.boundingBox.width),
             noseOffset: noseOffset,
             pupilOffset: pupilOffsets.isEmpty ? nil : pupilOffsets.reduce(0, +) / Double(pupilOffsets.count),
+            // 추적 프레임이면 마지막 검출 때의 값
             yaw: face.yaw?.doubleValue
         )
+        return (features, EyeGeometry(mid: eyeMid, interocular: interocular))
     }
 }
 
@@ -137,12 +233,15 @@ struct Extraction {
     var timing: StageTiming
 }
 
-/// 한 프레임의 단계별 소요 시간 (초). wall = 실제 경과(ANE 대기 포함), cpu = 이 스레드가 쓴 CPU.
+/// 한 프레임의 단계별 소요 시간 (초, 같은 단계를 두 번 돌리면 합계).
+/// wall = 실제 경과(ANE 대기 포함), cpu = 그동안 **프로세스 전체**가 쓴 CPU.
+/// Vision 은 호출한 스레드가 아니라 자기 작업 스레드에서 계산하므로 스레드 CPU 로 재면 실제보다 훨씬 작게 나온다.
 struct StageTiming: Sendable {
     struct Stage: Sendable {
-        var ran = false
+        var count = 0
         var wall: Double = 0
         var cpu: Double = 0
+        var ran: Bool { count > 0 }
     }
 
     var detect = Stage()
@@ -151,18 +250,13 @@ struct StageTiming: Sendable {
 
     mutating func measure<T>(_ stage: WritableKeyPath<StageTiming, Stage>, _ body: () -> T) -> T {
         let wallStart = CACurrentMediaTime()
-        let cpuStart = threadCPUTime()
+        let cpuStart = CPUClock.process()
         let result = body()
-        self[keyPath: stage] = Stage(ran: true, wall: CACurrentMediaTime() - wallStart, cpu: threadCPUTime() - cpuStart)
+        self[keyPath: stage].count += 1
+        self[keyPath: stage].wall += CACurrentMediaTime() - wallStart
+        self[keyPath: stage].cpu += CPUClock.process() - cpuStart
         return result
     }
-}
-
-/// 현재 스레드가 쓴 CPU 시간(초)
-func threadCPUTime() -> Double {
-    var ts = timespec()
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts)
-    return Double(ts.tv_sec) + Double(ts.tv_nsec) / 1e9
 }
 
 private extension CGRect {

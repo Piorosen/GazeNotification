@@ -39,9 +39,13 @@ struct PipelineView: View {
                     .foregroundStyle(rateColor(rate))
                 Text(rate.reason).foregroundStyle(.secondary)
             }
-            Text("카메라 \(fps(rate.deviceFPS))fps 중 \(rate.stride == 1 ? "매 프레임" : "\(rate.stride)프레임마다 1번") 처리 → "
-                 + "AI 추론 주기 \(fps(rate.processingFPS))회/s")
-            Text("측정: 받은 프레임 \(fps(p.receivedFPS))/s · 처리 \(fps(p.processedFPS))/s · 얼굴 있음 \(fps(p.landmarksFPS))/s")
+            if rate == .paused {
+                Text(model.cameraPause?.title ?? rate.reason)
+            } else {
+                Text("\(model.policy.applied.title) 프로필 · 목표 \(fps(model.targetHz))회/s 처리 · 카메라 \(formatFPS(p.deviceFPS))fps · "
+                     + (p.detectionInterval <= 1 ? "얼굴 검출 매번" : "얼굴 검출 \(p.detectionInterval)번에 1번"))
+            }
+            Text("측정: 받은 프레임 \(fps(p.receivedFPS))/s · 처리 \(fps(p.processedFPS))/s · 검출 \(fps(p.detectFPS))/s · 얼굴 있음 \(fps(p.featuresFPS))/s")
                 .foregroundStyle(.secondary)
             if live.uptime > 5 {
                 Text("실행 \(duration(live.uptime)) 동안 평균 \(fps(live.averageProcessedFPS))회/s · " + rateShareText(live.rateShare))
@@ -70,8 +74,9 @@ struct PipelineView: View {
                          detail: "UVC 드라이버가 프레임 전달 (디코딩 없음)",
                          rate: p.receivedFPS, time: nil)
                 stageRow("② 얼굴 검출", "VNDetectFaceRectangles · \(deviceLabel(devices.detection))",
-                         detail: "이미지 전체 → 얼굴 상자 + 머리 방향(yaw)",
-                         rate: p.processedFPS, time: (p.detectWallMs, p.detectCPUms))
+                         detail: p.detectionInterval <= 1 ? "이미지 전체 → 얼굴 상자 + 머리 방향(yaw)"
+                             : "\(p.detectionInterval)번에 1번 · 그 사이는 직전 얼굴 상자를 눈에 맞춰 옮김",
+                         rate: p.detectFPS, time: (p.detectWallMs, p.detectCPUms))
                 stageRow("③ 랜드마크", "VNDetectFaceLandmarks 76점 · \(deviceLabel(devices.landmarks))",
                          detail: "얼굴 상자 안 → 눈·동공·코 등 76개 점",
                          rate: p.landmarksFPS, time: (p.landmarksWallMs, p.landmarksCPUms))
@@ -129,15 +134,17 @@ struct PipelineView: View {
                         GridRow {
                             Text(term.feature.title).help(term.feature.detail)
                             Text(term.feature.format(term.value))
-                            Text(term.slopeText).foregroundStyle(term.slope == nil ? .tertiary : .secondary)
+                            Text(term.slopeText + (term.slope != nil && abs(term.gain - 1) > 0.001 ? String(format: " (%.0f%%)", term.gain * 100) : ""))
+                                .foregroundStyle(term.slope == nil ? .tertiary : .secondary)
                             Text(term.slope == nil ? "—" : String(format: "%+.1f%%", term.contribution * 100))
                                 .foregroundStyle(term.slope == nil ? Color.secondary : contributionColor(term.contribution))
                         }
                     }
                 }
                 let sum = b.terms.reduce(0) { $0 + $1.contribution }
-                Text(String(format: "%.1f%% %@ %.1f%% = %.1f%%  →  필터 후 %.1f%%",
-                            b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, b.raw * 100, b.filtered * 100))
+                let adjustedText = abs(b.adjusted - b.raw) > 0.0005 ? String(format: "  →  수동 조정 %.1f%%", b.adjusted * 100) : ""
+                Text(String(format: "%.1f%% %@ %.1f%% = %.1f%%", b.intercept * 100, sum >= 0 ? "+" : "−", abs(sum) * 100, b.raw * 100)
+                     + adjustedText + String(format: "  →  필터 후 %.1f%%", b.filtered * 100))
                     .fontWeight(.medium)
                 let moverWidth = model.liveStats.mover?.screenWidth ?? 0
                 let width = moverWidth > 0 ? moverWidth : Double(NSScreen.main?.frame.width ?? 0)
@@ -186,7 +193,7 @@ struct PipelineView: View {
         let live = model.liveStats
         return SectionBox("비용") {
             if model.placementSource == .gaze {
-                Text("신경망 추론 \(fps(p.inferencesPerSecond))회/s (Neural Engine) · AI 파이프라인 CPU \(percent(p.cpuPercent))")
+                Text("신경망 추론 \(fps(p.inferencesPerSecond))회/s (Neural Engine) · Vision 호출 중 CPU \(percent(p.cpuPercent))")
                 let wall = p.detectWallMs + p.landmarksWallMs
                 let cpu = p.detectCPUms + p.landmarksCPUms + p.featuresCPUms
                 if wall > 0 {
@@ -194,7 +201,7 @@ struct PipelineView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("GazeNotification 전체 CPU \(percent(live.processCPUPercent)) (코어 1개 = 100%)")
+            Text("GazeNotification 전체 CPU \(percent(live.processCPUPercent)) = 카메라·AI \(percent(live.trackingCPUPercent)) + 메인 스레드 \(percent(live.mainCPUPercent)) (코어 1개 = 100%)")
                 .foregroundStyle(.secondary)
         }
     }
@@ -243,6 +250,7 @@ struct PipelineView: View {
         case .normal: .green
         case .still: .blue
         case .away: .gray
+        case .paused: .secondary
         }
     }
 
