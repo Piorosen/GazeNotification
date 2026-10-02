@@ -392,7 +392,7 @@
   new ResizeObserver(() => { if (rows.length) draw(); }).observe(host);
   document.addEventListener("gn:language", () => { if (rows.length) { build(); draw(); } });
 
-  fetch("assets/performance-history.json")
+  fetch(`assets/performance-history.json${window.gnAssetQuery || ""}`)
     .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
     .then((json) => {
       const columns = json.columns;

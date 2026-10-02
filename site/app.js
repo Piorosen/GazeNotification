@@ -6,6 +6,10 @@
   const root = document.documentElement;
   let lang = "en";
   let release = null; // GitHub 최신 릴리스 (없거나 못 읽으면 null)
+  // 배포 버전 (pages.yml 이 넣는다). 이미지 주소에 붙여 캐시된 예전 이미지를 쓰지 않게 한다
+  const version = document.querySelector('meta[name="asset-version"]')?.content;
+  const bust = version && version !== "dev" ? `?v=${version}` : "";
+  window.gnAssetQuery = bust;
 
   // MARK: - 언어
 
@@ -57,7 +61,7 @@
     });
     // 화면 살펴보기의 앱 스크린샷은 언어마다 따로 찍어 두었다
     document.querySelectorAll("img[data-tour]").forEach((img) => {
-      img.src = `assets/tour/${LANGS[lang]}/${img.dataset.tour}.webp`;
+      img.src = `assets/tour/${LANGS[lang]}/${img.dataset.tour}.webp${bust}`;
     });
     const picker = document.getElementById("lang");
     if (picker) picker.value = lang;

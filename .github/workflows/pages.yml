@@ -24,6 +24,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: 파일 주소에 버전 붙이기
+        # 이 도메인(Cloudflare)은 css·js·이미지를 4시간 캐시한다. 새 HTML 이 예전 파일과 섞이지 않게 주소를 바꾼다
+        run: |
+          V="${GITHUB_SHA::7}"
+          sed -i -E "s#(href|src)=\"(style\.css|[a-z0-9-]+\.js)\"#\1=\"\2?v=$V\"#g; s#(name=\"asset-version\" content=)\"dev\"#\1\"$V\"#" site/index.html
+          grep -E 'asset-version|\?v=' site/index.html
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
