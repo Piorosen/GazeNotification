@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="meta.title">GazeNotification — notifications, where you're looking</title>
+  <meta name="description" data-i18n-attr="content:meta.description"
+        content="A menu bar app that shows macOS notifications where you're looking on an ultrawide monitor. It reads your gaze through the webcam, and video never leaves your Mac.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="GazeNotification">
+  <meta property="og:description" content="macOS notifications, where you're looking — for ultrawide monitors.">
+  <meta property="og:image" content="https://piorosen.github.io/GazeNotification/assets/icon.png">
+  <link rel="icon" href="assets/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..800&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    document.documentElement.classList.add("js");
+    // app.js 를 못 읽어도 내용이 숨은 채로 남지 않게
+    setTimeout(() => document.documentElement.classList.add("i18n-ready"), 1500);
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a class="wordmark" href="#top" aria-label="GazeNotification">
+        <img src="assets/icon.png" alt="" width="32" height="32">
+        <span>GazeNotification</span>
+      </a>
+      <nav class="header-nav">
+        <label class="lang-picker">
+          <span class="visually-hidden" data-i18n="nav.language">Language</span>
+          <select id="lang" aria-label="Language">
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </label>
+        <a class="header-github" href="https://github.com/Piorosen/GazeNotification">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="top">
+      <h1 data-i18n="hero.title">Notifications, where you're looking.</h1>
+      <p class="lead" data-i18n="hero.lead">On a 32:9 ultrawide, macOS notifications always land in the far top-right corner, where they're easy to miss. GazeNotification reads the direction of your face and eyes through your webcam and moves notifications above wherever you're looking.</p>
+      <div class="actions">
+        <a class="button primary" id="download"
+           href="https://github.com/Piorosen/GazeNotification/releases/latest/download/GazeNotification.dmg">
+          <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M10 2v10m0 0-4-4m4 4 4-4M3 15v2h14v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="hero.download">Download for macOS</span>
+        </a>
+        <a class="button" href="https://github.com/Piorosen/GazeNotification" data-i18n="hero.source">View source on GitHub</a>
+      </div>
+      <p class="meta" id="release-meta" data-i18n="hero.metaFallback">macOS 14 or later, Apple Silicon and Intel. Free and open source (MIT).</p>
+    </section>
+
+    <!-- 이 페이지에서 가장 중요한 것: 32:9 화면에서 알림이 시선(마우스)을 따라가는 모습 -->
+    <section class="demo wrap-wide" aria-labelledby="demo-note">
+      <div class="demo-modes" role="group" aria-label="Mode">
+        <button type="button" class="mode" data-mode="standard" aria-pressed="false" data-i18n="demo.modeDefault">Standard macOS</button>
+        <button type="button" class="mode" data-mode="gaze" aria-pressed="true" data-i18n="demo.modeGaze">GazeNotification</button>
+      </div>
+      <div class="screen" id="screen" role="img" data-i18n-attr="aria-label:demo.label" aria-label="A notification following your gaze on a 32:9 screen">
+        <div class="menubar" aria-hidden="true">
+          <span class="menubar-left"><span class="apple-dot"></span><b>Finder</b><span>File</span><span>Edit</span><span>View</span></span>
+          <span class="menubar-right">
+            <svg class="menubar-eye" viewBox="0 0 24 14" aria-hidden="true"><path d="M1 7c3-4 7-6 11-6s8 2 11 6c-3 4-7 6-11 6S4 11 1 7Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="7" r="3" fill="currentColor"/></svg>
+            <span id="clock">9:41</span>
+          </span>
+        </div>
+        <div class="desk" aria-hidden="true">
+          <div class="window w1"><i></i><i></i><i></i></div>
+          <div class="window w2"><i></i><i></i><i></i></div>
+          <div class="window w3"><i></i><i></i><i></i></div>
+        </div>
+        <div class="banner" id="banner" aria-hidden="true">
+          <span class="banner-icon"></span>
+          <span class="banner-text">
+            <span class="banner-head"><b data-i18n="demo.bannerApp">Calendar</b><span data-i18n="demo.bannerTime">now</span></span>
+            <span class="banner-title" data-i18n="demo.bannerTitle">Design review</span>
+            <span class="banner-body" data-i18n="demo.bannerBody">Starts in 5 minutes</span>
+          </span>
+        </div>
+        <div class="gaze" id="gaze" aria-hidden="true"></div>
+      </div>
+      <div class="demo-text">
+        <p class="demo-note" id="demo-note" data-i18n="demo.noteGaze">Notifications appear above wherever you're looking.</p>
+        <p class="demo-caption" data-i18n="demo.caption">Move your pointer across the screen as if it were your gaze.</p>
+      </div>
+    </section>
+
+    <section class="wrap section" aria-labelledby="how-title">
+      <h2 id="how-title" data-i18n="how.title">How it works</h2>
+      <ol class="steps">
+        <li><h3 data-i18n="how.1.title">The camera looks at your face</h3><p data-i18n="how.1.body">A few times a second, Vision finds your face, eyes, nose, and pupils on the Neural Engine.</p></li>
+        <li><h3 data-i18n="how.2.title">It works out where across the screen you're looking</h3><p data-i18n="how.2.body">It combines your head direction and pupil position to estimate which part of the screen you're looking at. A one-time 15-second calibration makes it accurate.</p></li>
+        <li><h3 data-i18n="how.3.title">It moves the notification spot ahead of time</h3><p data-i18n="how.3.body">Before a notification arrives, the spot where it will appear is already moved to where you're looking, so it shows up there from the start. If your gaze moves while it's on screen, it follows.</p></li>
+        <li><h3 data-i18n="how.4.title">It puts things back when needed</h3><p data-i18n="how.4.body">When you open Notification Center or quit the app, the notification window goes back to its original place.</p></li>
+      </ol>
+    </section>
+
+    <section class="wrap section" aria-labelledby="details-title">
+      <h2 id="details-title" data-i18n="details.title">Battery, privacy, accuracy</h2>
+      <dl class="details">
+        <div><dt data-i18n="details.battery.title">Easy on the battery</dt><dd data-i18n="details.battery.body">It switches to Balanced on a power adapter and to Power Saving on battery, in Low Power Mode, or when the Mac runs hot. It computes less while your gaze rests or you're away, and turns the camera off when the screen locks. On an M4 Max the whole app used about 3% CPU in Power Saving and about 7% in Balanced.</dd></div>
+        <div><dt data-i18n="details.privacy.title">Video never leaves your Mac</dt><dd data-i18n="details.privacy.body">Camera frames are turned into a few numbers describing your face direction in memory and discarded right away. No video or photos are saved, and the app has no networking at all.</dd></div>
+        <div><dt data-i18n="details.tune.title">Tune it yourself</dt><dd data-i18n="details.tune.body">On top of the calibration you can adjust the horizontal shift and range, per-feature weights, jitter suppression, and screen zones by hand. It automatically picks the lowest-error combination of three face analysis methods and three estimation models.</dd></div>
+        <div><dt data-i18n="details.graphs.title">See what it computes</dt><dd data-i18n="details.graphs.body">Graphs of CPU usage, processing rate, and time per run over the last 10 minutes, with your own limits for each situation and a CPU cap.</dd></div>
+        <div><dt data-i18n="details.lang.title">Four languages</dt><dd data-i18n="details.lang.body">한국어, English, 日本語, 简体中文. Switch languages from the app's menu.</dd></div>
+      </dl>
+    </section>
+
+    <section class="wrap section" aria-labelledby="screens-title">
+      <h2 id="screens-title" data-i18n="screens.title">Screenshots</h2>
+      <div class="screens">
+        <figure class="shot shot-menu">
+          <img data-shot="menu" src="assets/screens/en/menu.png" width="420" height="590" alt="">
+          <figcaption data-i18n="screens.menu">The menu bar panel shows the current status and the per-frame pipeline.</figcaption>
+        </figure>
+        <figure class="shot shot-performance">
+          <img data-shot="performance" src="assets/screens/en/performance.png" width="760" height="650" alt="">
+          <figcaption data-i18n="screens.performance">Performance graphs record CPU, processing rate, and time per run every second.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="wrap section" id="install" aria-labelledby="install-title">
+      <h2 id="install-title" data-i18n="install.title">Install</h2>
+      <ol class="steps">
+        <li><p data-i18n="install.1">Open the DMG and drag GazeNotification into the Applications folder.</p></li>
+        <li>
+          <p data-i18n="install.2">Open GazeNotification. An eye icon appears in the menu bar instead of the Dock.</p>
+          <p class="note" id="gatekeeper" data-i18n="install.gatekeeper">This version is a preview that hasn't been notarized by Apple yet. If macOS says it can't verify the app the first time you open it, go to System Settings → Privacy &amp; Security and click “Open Anyway” at the bottom. After updating to a new version you may need to turn Accessibility access back on.</p>
+        </li>
+        <li><p data-i18n="install.3">Allow Accessibility and Camera access. Accessibility is used to move the notification window, and the camera to read your gaze.</p></li>
+        <li><p data-i18n="install.4">Choose “Calibrate Gaze” in the menu and look at the 5 dots that appear one by one along the top of the screen. It takes about 15 seconds.</p></li>
+      </ol>
+      <p class="requirements" data-i18n="install.requirements">You'll need macOS 14 or later and a webcam centered on top of your monitor (a built-in camera or an iPhone via Continuity Camera also works).</p>
+    </section>
+
+    <section class="wrap section" aria-labelledby="faq-title">
+      <h2 id="faq-title" data-i18n="faq.title">Questions</h2>
+      <div class="faq">
+        <details><summary data-i18n="faq.store.q">Why isn't it on the Mac App Store?</summary><p data-i18n="faq.store.a">Mac App Store apps must run in the App Sandbox, and sandboxed apps can't use the Accessibility features that move other apps' windows. Notification banners belong to macOS's Notification Center, so they can't be moved from inside the sandbox.</p></details>
+        <details><summary data-i18n="faq.camera.q">Is the camera always on?</summary><p data-i18n="faq.camera.a">It's on while tracking your gaze, and the camera indicator light is on too. It turns off when the display sleeps or the screen locks, and after a long absence it turns off until you use the keyboard or mouse again. If you set the position source to the mouse, the camera isn't used at all.</p></details>
+        <details><summary data-i18n="faq.intel.q">Does it work on Intel Macs?</summary><p data-i18n="faq.intel.a">Yes. It's a universal app for Apple Silicon and Intel. Macs without a Neural Engine run the models on the GPU, which uses a little more CPU.</p></details>
+        <details><summary data-i18n="faq.displays.q">What about multiple displays?</summary><p data-i18n="faq.displays.a">For now it estimates where you're looking across the main display only, and notifications appear along the top of the main display.</p></details>
+        <details><summary data-i18n="faq.stuck.q">Notifications appear in an odd place after the app was force quit.</summary><p data-i18n-html="faq.stuck.a">If the app quits unexpectedly, the notification window can stay where it was moved. Open the app again, or run <code>killall NotificationCenter</code> in Terminal to put it back.</p></details>
+      </div>
+    </section>
+
+    <section class="wrap section privacy" id="privacy" aria-labelledby="privacy-title">
+      <h2 id="privacy-title" data-i18n="privacy.title">Privacy policy</h2>
+      <p class="updated" data-i18n="privacy.updated">Effective October 3, 2026</p>
+      <p data-i18n="privacy.collect">GazeNotification doesn't collect personal data. The app doesn't communicate with any server.</p>
+      <p data-i18n="privacy.camera">Camera video is processed only in your Mac's memory. Each frame is turned into a few numbers describing your face direction and then discarded right away. No video or photos are saved or sent anywhere.</p>
+      <p data-i18n-html="privacy.local">This Mac stores your settings, the calibration result (face feature numbers and screen positions), and diagnostic logs (<code>~/Library/Logs/GazeNotification</code>). Logs contain only the structure and text lengths of the notification window, never notification content. To remove everything, delete the app, run <code>defaults delete party.udon.GazeNotification</code> in Terminal, and delete the log folder.</p>
+      <p data-i18n="privacy.site">This website is served by GitHub Pages and reads the latest version information from the GitHub API. It uses no cookies or analytics and stores only your chosen language in the browser. Visits are subject to GitHub's privacy statement.</p>
+      <p data-i18n-html="privacy.contact">For questions, please open a <a href="https://github.com/Piorosen/GazeNotification/issues">GitHub issue</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-row">
+      <p data-i18n="footer.license">Open source under the MIT License.</p>
+      <p class="footer-links">
+        <a href="#privacy" data-i18n="footer.privacy">Privacy policy</a>
+        <a href="https://github.com/Piorosen/GazeNotification/releases" data-i18n="footer.releases">All versions</a>
+        <a href="https://github.com/Piorosen/GazeNotification">GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

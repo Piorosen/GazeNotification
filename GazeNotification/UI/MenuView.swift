@@ -236,6 +236,10 @@ struct MenuView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
+            Button("홈페이지") { NSWorkspace.shared.open(AppLinks.homepage) }
+                .buttonStyle(.link)
+                .accessibilityIdentifier("menu.homepage")
+
             Spacer()
 
             Button("종료") { NSApp.terminate(nil) }

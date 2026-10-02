@@ -1,0 +1,33 @@
+# 단위 테스트와 언어팩 점검. UI 테스트는 화면을 직접 조작하므로 여기서 돌리지 않는다 (scripts/test.sh 참고)
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["site/**", "**/*.md"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Xcode 고르기
+        run: |
+          XCODE=/Applications/Xcode_16.4.app
+          [[ -d $XCODE ]] || XCODE=$(dirname "$(dirname "$(xcode-select -p)")")
+          echo "DEVELOPER_DIR=$XCODE/Contents/Developer" >> "$GITHUB_ENV"
+          "$XCODE/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: 단위 테스트
+        run: scripts/test.sh unit -quiet
+
+      - name: 언어팩 점검
+        run: scripts/check-localization.sh

@@ -1,0 +1,83 @@
+# 태그 v* 를 올리면: 단위 테스트 → universal 빌드·서명(·공증) → DMG → GitHub 릴리스
+#
+# 공증된 릴리스를 만들려면 저장소 Settings → Secrets and variables → Actions 에 넣는다 (README 의 "배포" 참고):
+#   DEVELOPER_ID_P12_BASE64, DEVELOPER_ID_P12_PASSWORD   Developer ID Application 인증서(.p12)
+#   NOTARY_KEY_P8_BASE64, NOTARY_KEY_ID, NOTARY_ISSUER_ID App Store Connect API 키
+# 없으면 ad-hoc 서명으로 만들고, 릴리스 설명과 홈페이지에 Gatekeeper 안내가 붙는다.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # secrets 는 if: 에 바로 못 쓰므로 있는지만 환경 변수로 옮긴다
+      HAS_DEVELOPER_ID: ${{ secrets.DEVELOPER_ID_P12_BASE64 != '' }}
+      HAS_NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # 빌드 번호(커밋 수)와 이전 태그 이후 변경 사항에 전체 기록이 필요
+
+      - name: Xcode 고르기
+        run: |
+          XCODE=/Applications/Xcode_16.4.app
+          [[ -d $XCODE ]] || XCODE=$(dirname "$(dirname "$(xcode-select -p)")")
+          echo "DEVELOPER_DIR=$XCODE/Contents/Developer" >> "$GITHUB_ENV"
+          "$XCODE/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: 단위 테스트
+        run: scripts/test.sh unit -quiet
+
+      - name: Developer ID 인증서 가져오기
+        if: env.HAS_DEVELOPER_ID == 'true'
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/developer-id.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: 공증 키 준비
+        if: env.HAS_NOTARY_KEY == 'true'
+        env:
+          P8_BASE64: ${{ secrets.NOTARY_KEY_P8_BASE64 }}
+        run: |
+          echo "$P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+
+      - name: 빌드·서명·DMG
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          # 인증서를 넣었다면 공증까지 못 했을 때 실패로 끝낸다 (반쯤 서명된 릴리스를 올리지 않게)
+          REQUIRE_NOTARIZATION: ${{ env.HAS_DEVELOPER_ID == 'true' && '1' || '' }}
+        run: scripts/release.sh "$GITHUB_REF_NAME"
+
+      - name: GitHub 릴리스 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/publish-release.sh
+
+      - name: 키체인 정리
+        if: always() && env.HAS_DEVELOPER_ID == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

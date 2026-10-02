@@ -46,6 +46,16 @@ enum DebugCommands {
 }
 
 extension DebugCommands {
+    /// 화면 배율과 관계없이 2배 해상도로 그릴 비트맵 (홈페이지 스크린샷용)
+    static func retinaRep(for view: NSView) -> NSBitmapImageRep? {
+        let size = view.bounds.size
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = size
+        return rep
+    }
+
     /// 설정 창의 탭 내용을 화면 밖 창에 그려 ~/Library/Logs/GazeNotification/settings-<탭>.png 로 저장 (레이아웃 확인용).
     /// 그리는 동안은 설정 창이 열린 것처럼 실시간 값을 흘려보낸다.
     static func snapshotSettings(model: AppModel, tab: SettingsTab) {
@@ -79,7 +89,7 @@ extension DebugCommands {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {
                 hosting.layoutSubtreeIfNeeded()
-                if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                if let rep = retinaRep(for: hosting) {
                     hosting.cacheDisplay(in: hosting.bounds, to: rep)
                     if let data = rep.representation(using: .png, properties: [:]) {
                         let url = Log.directory.appendingPathComponent(name)
@@ -112,7 +122,7 @@ extension DebugCommands {
                 window.setContentSize(size)
                 hosting.frame = NSRect(origin: .zero, size: size)
                 hosting.layoutSubtreeIfNeeded()
-                if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                if let rep = retinaRep(for: hosting) {
                     hosting.cacheDisplay(in: hosting.bounds, to: rep)
                     if let data = rep.representation(using: .png, properties: [:]) {
                         let url = Log.directory.appendingPathComponent("menu.png")

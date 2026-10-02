@@ -3,6 +3,8 @@
 메뉴 막대 앱 **GazeNotification** — 32:9 같은 초광폭 모니터에서 macOS 알림이 항상 오른쪽 위에 떠서 못 보는 문제를 해결하는 메뉴 막대 앱.
 웹캠으로 얼굴·눈 방향을 추적해 **지금 보고 있는 가로 위치**의 화면 상단으로 알림 배너를 옮긴다.
 
+**내려받기**: [홈페이지](https://piorosen.github.io/GazeNotification/) · [GazeNotification.dmg (최신 버전)](https://github.com/Piorosen/GazeNotification/releases/latest/download/GazeNotification.dmg) · [모든 릴리스](https://github.com/Piorosen/GazeNotification/releases)
+
 ## 동작 방식
 
 ```
@@ -122,6 +124,52 @@ scripts/debug.sh mode-light             # AI 모드 분석 방식 바꾸기 (pre
 scripts/debug.sh device-gpu             # Vision 연산 장치 바꾸기 (automatic, neuralEngine, gpu, cpu)
 ```
 
+## 배포
+
+Mac App Store 에는 올릴 수 없다 — App Store 앱은 App Sandbox 가 필수인데, 샌드박스 안에서는 손쉬운 사용(AX) API 로
+다른 앱(NotificationCenter)의 창을 옮길 수 없다. 그래서 **Developer ID 서명 + 공증** 으로 직접 배포한다 (GitHub Releases).
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0      # → Actions 가 테스트·빌드·서명·릴리스까지 (release.yml)
+
+scripts/release.sh 0.2.0                      # 손으로: universal DMG 만들기 (build/release/)
+scripts/publish-release.sh                    # 손으로: GitHub 릴리스 올리기 (gh 로그인 필요, DRY_RUN=1 이면 설명만 보기)
+```
+
+- `release.sh`: Apple Silicon·Intel 공용 Release 빌드 → Hardened Runtime 서명 → (가능하면) 앱·DMG 공증과 staple → DMG.
+  버전은 인자(태그의 `v` 는 뗌), 빌드 번호는 커밋 수. 결과는 `GazeNotification.dmg`(홈페이지가 가리키는 고정 이름)와 `GazeNotification-<버전>.dmg`, 체크섬.
+- `publish-release.sh`: 태그 `v<버전>` 릴리스를 만들고(있으면 파일 교체) 설치 안내·변경 사항(이전 태그부터의 커밋)·체크섬을 붙인다.
+  홈페이지 다운로드 버튼이 `releases/latest/download/GazeNotification.dmg` 라서 **시험판으로 올리지 않는다**.
+- 서명 인증서가 없으면 ad-hoc 서명으로 만든다. 받은 사람은 처음 열 때 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** 가 필요하고,
+  릴리스 설명과 홈페이지에 그 안내가 자동으로 붙는다 (릴리스 설명의 `signing: adhoc | developer-id | notarized` 를 홈페이지가 읽음).
+  ad-hoc 은 빌드마다 서명이 바뀌어 업데이트 후 손쉬운 사용 권한을 다시 켜야 할 수 있다.
+
+### 공증된 릴리스 만들기
+
+Apple Developer Program(유료)에 가입한 뒤 저장소 **Settings → Secrets and variables → Actions** 에 다섯 개를 넣으면,
+다음 태그부터 Actions 가 공증까지 하고 Gatekeeper 안내가 사라진다. 하나라도 빠져 공증을 못 하면 릴리스를 올리지 않고 실패한다.
+
+| 이름 | 내용 |
+|---|---|
+| `DEVELOPER_ID_P12_BASE64` | 키체인에서 내보낸 "Developer ID Application" 인증서+개인 키(.p12): `base64 -i cert.p12 \| pbcopy` |
+| `DEVELOPER_ID_P12_PASSWORD` | .p12 를 내보낼 때 정한 암호 |
+| `NOTARY_KEY_P8_BASE64` | App Store Connect → 사용자 및 액세스 → 통합 → App Store Connect API 에서 만든 키(.p8): `base64 -i AuthKey_XXXX.p8 \| pbcopy` |
+| `NOTARY_KEY_ID` | 그 키의 ID |
+| `NOTARY_ISSUER_ID` | 같은 화면의 Issuer ID |
+
+손으로 공증할 때는 `xcrun notarytool store-credentials gaze` 로 한 번 저장한 뒤 `NOTARY_PROFILE=gaze scripts/release.sh 0.2.0`.
+
+### 홈페이지
+
+`site/` (정적 HTML·CSS·JS, 빌드 없음) → `main` 에 올리면 `pages.yml` 이 GitHub Pages 로 배포한다: <https://piorosen.github.io/GazeNotification/>
+
+- 한국어·English·日本語·简体中文 (`site/i18n.js`, 브라우저 언어로 고르고 `?lang=ja` 로 지정 가능).
+- 최신 릴리스의 버전·크기는 GitHub API 로 읽어 다운로드 버튼 밑에 보여 준다.
+- 스크린샷(`site/assets/screens/<언어>/`)은 `scripts/debug.sh snapshot`, `settings-performance` 로 언어별로 찍은 것.
+- 로컬에서 보기: `python3 -m http.server -d site 8000`
+
+CI(`ci.yml`)는 `main` 푸시와 PR 마다 단위 테스트와 언어팩 점검을 돌린다. UI 테스트는 화면을 직접 조작하므로 CI 에서 돌리지 않는다.
+
 ## 처음 사용
 
 1. 실행하면 메뉴 막대에 👁 아이콘이 생긴다 (Dock 아이콘 없음).
@@ -206,6 +254,9 @@ Config/           Info.plist, entitlements (샌드박스 끔 — 다른 앱 창�
 GazeNotification/Localizable.xcstrings, InfoPlist.xcstrings   언어팩 (String Catalog)
 GazeNotificationTests/    단위 테스트 (Swift Testing)
 GazeNotificationUITests/  UI 테스트 (XCUITest)
+scripts/          run · test · release · publish-release · check-localization · debug
+site/             홈페이지 (GitHub Pages)
+.github/workflows/ ci (단위 테스트) · release (태그 → DMG → 릴리스) · pages (홈페이지)
 ```
 
 ## 한계
