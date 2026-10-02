@@ -217,9 +217,12 @@ struct GazeCalibration: Codable, Equatable {
     }
 
     /// - Parameter ridge: 표준화된 특징 공간에서의 L2 규제 강도 (샘플 수에 비례해 적용)
+    /// 학습에 필요한 최소 샘플 수. 보정 점 3개 × 점당 0.8초(실시간 10회/s → 점당 약 8개)도 학습되도록.
+    static let minimumSamples = 20
+
     /// - Parameter powers: 덧붙일 거듭제곱 (빈 배열 = 선형). 예: [3] = 세제곱 항
     static func fit(_ baseRows: [RegressionRow], powers: [Int] = [], ridge: Double = 0.02,
-                    minSamples: Int = 30) -> GazeCalibration? {
+                    minSamples: Int = minimumSamples) -> GazeCalibration? {
         guard let baseDimension = baseRows.first?.features.count, baseDimension > 0, baseRows.count >= minSamples else { return nil }
         var expansion: Expansion?
         if !powers.isEmpty {

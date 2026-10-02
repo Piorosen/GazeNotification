@@ -66,11 +66,19 @@ struct GazeModelTests {
         #expect(tight.rmse > loose.rmse)
     }
 
-    @Test("샘플이 30개 미만이면 학습하지 않는다")
+    @Test("샘플이 최소 개수 미만이면 학습하지 않는다")
     func tooFewSamples() {
-        #expect(GazeCalibration.fit(linearRows(count: 29)) == nil)
-        #expect(GazeCalibration.fit(linearRows(count: 30)) != nil)
+        let minimum = GazeCalibration.minimumSamples
+        #expect(GazeCalibration.fit(linearRows(count: minimum - 1)) == nil)
+        #expect(GazeCalibration.fit(linearRows(count: minimum)) != nil)
         #expect(GazeCalibration.fit([]) == nil)
+    }
+
+    @Test("가장 짧은 보정 설정(점 3개 × 0.8초 × 실시간 10회/s)도 학습된다")
+    func shortestCalibrationFits() {
+        let perTarget = Int(0.8 * TrackingRate.liveHz)
+        #expect(3 * perTarget >= GazeCalibration.minimumSamples)
+        #expect(perTarget >= 6, "보정 화면은 점마다 6개 이상을 요구한다")
     }
 
     @Test("값이 80% 미만인 특징과 변하지 않는 특징은 쓰지 않는다")

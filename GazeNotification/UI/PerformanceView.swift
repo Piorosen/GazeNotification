@@ -266,7 +266,7 @@ struct HistoryChart: View {
             .accessibilityElement(children: .ignore)
             .accessibilityIdentifier("chart.\(id)")
             .accessibilityLabel("\(samples.count)개 기록")
-            .accessibilityValue("\(samples.count)")
+            .accessibilityValue(selected.map { "선택 " + Self.timeFormatter.string(from: $0.time) } ?? "\(samples.count)")
         }
     }
 

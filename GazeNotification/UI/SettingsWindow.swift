@@ -7,6 +7,8 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private unowned let model: AppModel
     private var window: NSWindow?
+    /// SwiftUI 화면이 붙어 있는지 (NSWindow 는 만들 때 빈 contentView 를 갖고 있어 nil 검사로는 알 수 없다)
+    private var hasContent = false
 
     init(model: AppModel) {
         self.model = model
@@ -15,9 +17,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func show() {
         let window = self.window ?? makeWindow()
         self.window = window
-        if window.contentView == nil {
+        if !hasContent {
             window.contentView = NSHostingView(rootView: SettingsView(model: model)
                 .defaultAppStorage(AppEnvironment.defaults))
+            hasContent = true
         }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
@@ -41,6 +44,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         model.isSettingsVisible = false
         window?.contentView = nil
+        hasContent = false
     }
 
     /// 다른 창에 완전히 가려지거나 최소화되면 보이지 않는 것으로 친다 (실시간 속도·값 갱신 중단)
