@@ -140,6 +140,7 @@ struct FormNote: View {
 
     var body: some View {
         Text(text)
+            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }

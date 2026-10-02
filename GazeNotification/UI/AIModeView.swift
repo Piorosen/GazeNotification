@@ -96,30 +96,32 @@ struct AIModeView: View {
                 Text("\(kind.title) 모델이 \(model.analysisMode.shortTitle) 방식으로 학습되지 않아 \(model.activeEstimatorKind.title)을 씁니다.")
                     .font(.callout).foregroundStyle(.orange)
             }
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow {
-                    Text("모델").foregroundStyle(.secondary)
-                    Text("학습 오차").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                    Text("교차검증 오차").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                    Text("").gridColumnAlignment(.leading)
-                }
-                Divider().gridCellUnsizedAxes(.horizontal)
-                ForEach(EstimatorKind.allCases) { kind in
-                    GridRow(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(kind.title).fontWeight(kind == model.activeEstimatorKind ? .semibold : .regular)
-                            Text(kind.detail).font(.caption).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Text(errorText(training: kind)).monospacedDigit()
-                        Text(errorText(crossValidation: kind)).monospacedDigit()
-                        Text(statusText(kind))
-                            .font(.caption)
-                            .foregroundStyle(kind == model.activeEstimatorKind ? Color.accentColor : .secondary)
-                    }
-                }
+            HStack {
+                Text("모델")
+                Spacer()
+                Text("학습 오차").frame(width: 70, alignment: .trailing)
+                Text("교차검증").frame(width: 70, alignment: .trailing)
+                Text("").frame(width: 110, alignment: .leading)
             }
-            .font(.callout)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            ForEach(EstimatorKind.allCases) { kind in
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(kind.title).fontWeight(kind == model.activeEstimatorKind ? .semibold : .regular)
+                        Text(kind.detail).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 12)
+                    Text(errorText(training: kind)).monospacedDigit().frame(width: 70, alignment: .trailing)
+                    Text(errorText(crossValidation: kind)).monospacedDigit().frame(width: 70, alignment: .trailing)
+                    Text(statusText(kind))
+                        .font(.caption)
+                        .foregroundStyle(kind == model.activeEstimatorKind ? Color.accentColor : .secondary)
+                        .frame(width: 110, alignment: .leading)
+                }
+                .font(.callout)
+            }
         } header: {
             Text("시선 추정 모델 — \(model.analysisMode.shortTitle) 방식")
         } footer: {
@@ -135,7 +137,7 @@ struct AIModeView: View {
     }
 
     private func errorText(crossValidation kind: EstimatorKind) -> String {
-        if kind == .formula { return "(학습 없음)" }
+        if kind == .formula { return "—" }
         return model.calibration?.estimator(model.analysisMode, kind)?.crossValidationRMSE
             .map { String(format: "%.1f%%", $0 * 100) } ?? "—"
     }

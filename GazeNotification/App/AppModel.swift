@@ -71,6 +71,7 @@ final class AppModel {
         static let analysisMode = "ai.analysisMode"
         static let estimator = "ai.estimator"
         static let computeDevice = "ai.computeDevice"
+        static let modeCosts = "ai.modeCosts"
         static let profile = "performance.profile"
         static let customLimits = "performance.customLimits"
         static let adjustment = "gaze.adjustment"
@@ -385,6 +386,9 @@ final class AppModel {
         analysisMode = AnalysisMode(rawValue: defaults.string(forKey: Keys.analysisMode) ?? "") ?? .precise
         estimatorChoice = EstimatorChoice(rawValue: defaults.string(forKey: Keys.estimator) ?? "") ?? .automatic
         computePreference = ComputePreference(rawValue: defaults.string(forKey: Keys.computeDevice) ?? "") ?? .automatic
+        let savedCosts = Self.load([ModeCostKey: ModeCost].self, Keys.modeCosts, from: defaults) ?? [:]
+        modeCosts = savedCosts
+        latestModeCosts = savedCosts
         let profile = PerformanceProfile(rawValue: defaults.string(forKey: Keys.profile) ?? "") ?? .automatic
         let custom = (Self.load(PerformanceLimits.self, Keys.customLimits, from: defaults) ?? .balanced).sanitized
         self.profile = profile
@@ -1008,10 +1012,11 @@ final class AppModel {
         modeCosts = latestModeCosts
     }
 
-    /// 앱 종료 시 알림 창을 원래 위치로 되돌리고 카메라를 끈다.
+    /// 앱 종료 시 알림 창을 원래 위치로 되돌리고 카메라를 끈다. AI 모드 비교용 측정값은 남겨 둔다.
     func shutdown() {
         mover.stop()
         camera.stop()
+        save(latestModeCosts, Keys.modeCosts)
     }
 
     private func countFrame() {
@@ -1155,13 +1160,13 @@ struct LiveStats: Equatable {
 }
 
 /// AI 모드 비교표의 한 칸 (분석 방식 × 연산 장치)
-struct ModeCostKey: Hashable {
+struct ModeCostKey: Hashable, Codable {
     var mode: AnalysisMode
     var device: ComputePreference
 }
 
 /// 처리 1회당 평균 비용 (검출·랜드마크·특징 합, 추적 프레임 포함)
-struct ModeCost: Equatable {
+struct ModeCost: Equatable, Codable {
     var cpuMs: Double
     var wallMs: Double
     var samples: Int
