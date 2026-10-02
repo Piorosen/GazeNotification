@@ -3,7 +3,7 @@
 메뉴 막대 앱 **GazeNotification** — 32:9 같은 초광폭 모니터에서 macOS 알림이 항상 오른쪽 위에 떠서 못 보는 문제를 해결하는 메뉴 막대 앱.
 웹캠으로 얼굴·눈 방향을 추적해 **지금 보고 있는 가로 위치**의 화면 상단으로 알림 배너를 옮긴다.
 
-**내려받기**: [홈페이지](https://piorosen.github.io/GazeNotification/) · [GazeNotification.dmg (최신 버전)](https://github.com/Piorosen/GazeNotification/releases/latest/download/GazeNotification.dmg) · [모든 릴리스](https://github.com/Piorosen/GazeNotification/releases)
+**내려받기**: [홈페이지](https://blog.udon.party/GazeNotification/) · [GazeNotification.dmg (최신 버전)](https://github.com/Piorosen/GazeNotification/releases/latest/download/GazeNotification.dmg) · [모든 릴리스](https://github.com/Piorosen/GazeNotification/releases)
 
 ## 동작 방식
 
@@ -161,7 +161,7 @@ Apple Developer Program(유료)에 가입한 뒤 저장소 **Settings → Secret
 
 ### 홈페이지
 
-`site/` (정적 HTML·CSS·JS, 빌드 없음) → `main` 에 올리면 `pages.yml` 이 GitHub Pages 로 배포한다: <https://piorosen.github.io/GazeNotification/>
+`site/` (정적 HTML·CSS·JS, 빌드 없음) → `main` 에 올리면 `pages.yml` 이 GitHub Pages 로 배포한다: <https://blog.udon.party/GazeNotification/> (계정 사이트의 사용자 지정 도메인 아래. `piorosen.github.io/GazeNotification/` 도 여기로 넘어온다)
 
 - 한국어·English·日本語·简体中文 (`site/i18n.js`, 브라우저 언어로 고르고 `?lang=ja` 로 지정 가능).
 - 최신 릴리스의 버전·크기는 GitHub API 로 읽어 다운로드 버튼 밑에 보여 준다.

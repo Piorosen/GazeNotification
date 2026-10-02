@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 APP_NAME=GazeNotification
 OUT=build/release
 REPO="${GITHUB_REPOSITORY:-Piorosen/GazeNotification}"
-HOMEPAGE="https://piorosen.github.io/GazeNotification/"
+HOMEPAGE="https://blog.udon.party/GazeNotification/"
 [[ -f $OUT/version.txt && -f $OUT/signing.txt ]] || { echo "✗ $OUT 이 없습니다. 먼저 scripts/release.sh 를 실행하세요" >&2; exit 1; }
 VERSION=$(<$OUT/version.txt)
 SIGNING=$(<$OUT/signing.txt)
