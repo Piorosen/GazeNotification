@@ -1438,6 +1438,28 @@
         }
       }
     },
+    "권한 다시 설정": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Permission"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可をリセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置权限"
+          }
+        }
+      }
+    },
     "권한 없음 (시스템 설정에서 허용)": {
       "localizations": {
         "en": {
@@ -5242,6 +5264,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "重置位置"
+          }
+        }
+      }
+    },
+    "이미 켜져 있는데도 이 안내가 계속 보이면 권한 다시 설정을 누른 다음 다시 켜세요.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If it's already on and this message keeps appearing, click Reset Permission and then turn it on again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すでにオンなのにこの案内が表示され続ける場合は、「許可をリセット」をクリックしてからもう一度オンにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果已经打开但仍一直显示此提示，请点按“重置权限”，然后重新打开。"
           }
         }
       }

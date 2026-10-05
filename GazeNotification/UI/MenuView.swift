@@ -136,8 +136,16 @@ struct MenuView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("시스템 설정 열기") { model.requestAccessibility() }
-                .controlSize(.small)
+            Text("이미 켜져 있는데도 이 안내가 계속 보이면 권한 다시 설정을 누른 다음 다시 켜세요.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("시스템 설정 열기") { model.requestAccessibility() }
+                Button("권한 다시 설정") { model.resetAccessibility() }
+                    .accessibilityIdentifier("menu.resetAccessibility")
+            }
+            .controlSize(.small)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

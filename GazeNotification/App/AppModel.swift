@@ -644,6 +644,14 @@ final class AppModel {
         Permissions.openAccessibilitySettings()
     }
 
+    /// 목록에 켜져 있는데도 허용되지 않을 때: 남아 있는 항목을 지우고 다시 요청한다 (새 항목이 꺼진 채로 생긴다)
+    func resetAccessibility() {
+        Permissions.resetAccessibility { [weak self] succeeded in
+            Log.info("손쉬운 사용 권한 항목 초기화: \(succeeded ? "성공" : "실패")")
+            self?.requestAccessibility()
+        }
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
