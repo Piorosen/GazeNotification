@@ -2,8 +2,12 @@ import AppKit
 import ApplicationServices
 
 private let notificationCenterBundleID = "com.apple.notificationcenterui"
-/// 배너(일반 알림)와 알림(버튼이 있는 지속형)의 AX subrole
-private let bannerSubroles: Set<String> = ["AXNotificationCenterBanner", "AXNotificationCenterAlert"]
+/// 배너(일반 알림)와 알림(버튼이 있는 지속형)의 AX subrole.
+/// 같은 앱의 알림이 여러 개 쌓이면 `AXNotificationListItems` 그룹 안에 `…Stack` 으로 묶여 나온다
+private let bannerSubroles: Set<String> = [
+    "AXNotificationCenterBanner", "AXNotificationCenterAlert",
+    "AXNotificationCenterBannerStack", "AXNotificationCenterAlertStack",
+]
 /// 알림 센터 패널(위젯 목록)이 열려 있을 때 위젯 요소의 AXIdentifier 접두사
 private let widgetIdentifierPrefix = "widget-local"
 
