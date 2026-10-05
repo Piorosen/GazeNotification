@@ -36,13 +36,29 @@ NOTES=$OUT/notes.md
     echo "> [!IMPORTANT]"
     echo "> 이 버전은 Apple 공증을 받지 않았습니다. 처음 열면 \"확인할 수 없음\" 경고가 뜹니다 →"
     echo "> **시스템 설정 → 개인정보 보호 및 보안** 맨 아래에서 **그래도 열기** 를 누르세요."
-    echo "> 업데이트한 뒤에는 손쉬운 사용 목록에서 $APP_NAME 을 껐다 다시 켜야 할 수 있습니다."
     echo ">"
     echo "> This build is not notarized by Apple. macOS will warn on first launch →"
     echo "> open **System Settings → Privacy & Security** and click **Open Anyway** at the bottom."
-    echo "> After an update you may need to turn $APP_NAME off and on again under Accessibility."
     echo
   fi
+  # 권한은 코드 서명에 묶인다. 서명이 다른 이전 버전의 항목이 남으면 목록에는 켜져 있어도 듣지 않고, 껐다 켜도 안 풀린다
+  echo "> [!TIP]"
+  echo "> 손쉬운 사용 목록에 $APP_NAME 이 이미 켜져 있는데도 앱이 권한을 요청하면, 메뉴 막대의 $APP_NAME 메뉴에서"
+  echo "> **권한 다시 설정** 을 누른 다음 목록에서 다시 켜세요."
+  if [[ $SIGNING == adhoc ]]; then
+    echo "> 이 빌드는 ad-hoc 서명이라 업데이트할 때마다 이렇게 해야 합니다."
+  else
+    echo "> 0.1.1 이하에서 업데이트할 때 한 번만 필요합니다 (이후 버전은 서명이 같아 권한이 유지됩니다)."
+  fi
+  echo ">"
+  echo "> If $APP_NAME is already on under Accessibility but the app still asks for access, open the $APP_NAME menu"
+  echo "> in the menu bar, click **Reset Permission**, and turn it on again in the list."
+  if [[ $SIGNING == adhoc ]]; then
+    echo "> This build is ad-hoc signed, so you'll need to do this after every update."
+  else
+    echo "> This is needed only once when updating from 0.1.1 or earlier (later versions keep the same signature)."
+  fi
+  echo
   echo "macOS 14 이상 · Apple Silicon, Intel  /  macOS 14 or later · Apple Silicon and Intel"
   echo
   echo "## 변경 사항 · Changes"

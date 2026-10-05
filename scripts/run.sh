@@ -3,8 +3,10 @@
 #
 # 서명:
 #   - 유효한 "Apple Development" 인증서가 있으면 프로젝트 설정(팀 서명)대로 빌드
-#   - 없으면 ad-hoc 으로 빌드한 뒤 .signing/ 의 로컬 개발 인증서로 다시 서명
+#   - 없으면 ad-hoc 으로 빌드한 뒤 .signing/ 의 자체 서명 인증서로 다시 서명
 #     (권한이 재빌드 후에도 유지되도록). 강제: GAZENOTIFICATION_SIGNING=team|dev
+#     배포용 인증서(scripts/release-signing.sh)가 들어 있으면 그것을, 없으면 로컬 개발 인증서를 쓴다.
+#     배포용이면 내려받은 배포판과 서명이 같아서 둘을 번갈아 실행해도 권한이 풀리지 않는다
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,7 +30,11 @@ else
   [[ -f .signing/dev.keychain-db ]] || scripts/dev-signing.sh
   KC="$PWD/.signing/dev.keychain-db"
   security unlock-keychain -p gazenotification-dev "$KC"
-  HASH=$(security find-identity -p codesigning "$KC" | awk '/GazeNotification Local Dev/ {print $2; exit}')
+  IDENTITIES=$(security find-identity -p codesigning "$KC")
+  for NAME in "GazeNotification" "GazeNotification Local Dev"; do
+    HASH=$(awk -F'"' -v name="$NAME" '$2 == name {split($1, f, " "); print f[2]; exit}' <<< "$IDENTITIES")
+    [[ -n $HASH ]] && break
+  done
 
   # codesign 은 검색 목록에 있는 키체인에서만 identity 를 찾으므로 잠깐 추가했다가 복구
   ORIGINAL=(${(f)"$(security list-keychains -d user | tr -d ' "')"})

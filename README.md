@@ -79,10 +79,12 @@ open GazeNotification.xcodeproj   # Xcode 에서 ⌘R (팀 서명이 될 때)
 
 - `scripts/run.sh` 는 유효한 Apple Development 인증서가 없으면 `scripts/dev-signing.sh` 로 만든 **로컬 개발 인증서**(`.signing/`, git 제외)로 다시 서명한다.
   서명 요구조건이 "번들 ID + 인증서 해시"로 고정돼 **재빌드해도 권한이 유지**된다. 로그인 키체인은 건드리지 않는다.
+  `.signing/` 에 배포용 인증서(`scripts/release-signing.sh`)가 있으면 그것으로 서명해서, 내려받은 배포판과 번갈아 실행해도 권한이 풀리지 않는다.
 - Xcode → Settings → Accounts 에 Apple ID 로 로그인돼 있으면 팀 서명(Personal Team)을 쓴다. 이 경우 Xcode ⌘R 로도 권한이 유지된다.
   (팀 서명으로 바꾸면 서명이 달라지므로 권한을 한 번 다시 허용해야 한다.)
 
-권한이 꼬였을 때:
+권한이 꼬였을 때 (서명이 다른 빌드가 허용받은 항목이 남으면 목록에는 켜져 있어도 듣지 않고, 껐다 켜도 안 풀린다):
+메뉴의 손쉬운 사용 안내에서 **권한 다시 설정**을 누르면 아래 첫 줄을 실행하고 다시 요청한다. 그다음 목록에서 다시 켠다.
 
 ```sh
 tccutil reset Accessibility party.udon.GazeNotification
@@ -140,12 +142,26 @@ scripts/publish-release.sh                    # 손으로: GitHub 릴리스 올�
 ```
 
 - `release.sh`: Apple Silicon·Intel 공용 Release 빌드 → Hardened Runtime 서명 → (가능하면) 앱·DMG 공증과 staple → DMG.
+  서명 인증서는 Developer ID → 자체 서명 `GazeNotification` → ad-hoc 순으로 고른다.
   버전은 인자(태그의 `v` 는 뗌), 빌드 번호는 커밋 수. 결과는 `GazeNotification.dmg`(홈페이지가 가리키는 고정 이름)와 `GazeNotification-<버전>.dmg`, 체크섬.
 - `publish-release.sh`: 태그 `v<버전>` 릴리스를 만들고(있으면 파일 교체) 설치 안내·변경 사항(이전 태그부터의 커밋)·체크섬을 붙인다.
   홈페이지 다운로드 버튼이 `releases/latest/download/GazeNotification.dmg` 라서 **시험판으로 올리지 않는다**.
-- 서명 인증서가 없으면 ad-hoc 서명으로 만든다. 받은 사람은 처음 열 때 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** 가 필요하고,
-  릴리스 설명과 홈페이지에 그 안내가 자동으로 붙는다 (릴리스 설명의 `signing: adhoc | developer-id | notarized` 를 홈페이지가 읽음).
-  ad-hoc 은 빌드마다 서명이 바뀌어 업데이트 후 손쉬운 사용 권한을 다시 켜야 할 수 있다.
+- 공증이 없으면 받은 사람은 처음 열 때 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기** 가 필요하고,
+  릴리스 설명과 홈페이지에 그 안내가 자동으로 붙는다 (릴리스 설명의 `signing: adhoc | self-signed | developer-id | notarized` 를 홈페이지가 읽음).
+- 손쉬운 사용·카메라 권한은 코드 서명에 묶인다. **ad-hoc 은 빌드마다 서명(cdhash)이 바뀌어** 업데이트하면 목록에는 켜져 있는데 앱은
+  허용되지 않는다 (0.1.0·0.1.1 이 이랬다). 그래서 Developer ID 가 없으면 **자체 서명 인증서**로 서명한다 — Gatekeeper 에는 ad-hoc 과 같지만
+  서명 요구조건이 `identifier "party.udon.GazeNotification" and certificate leaf = H"…"` 로 고정돼 업데이트해도 권한이 유지된다.
+
+### 자체 서명 인증서 (Developer ID 가 없을 때)
+
+```sh
+scripts/release-signing.sh    # 처음 한 번: 인증서 만들기 → .signing/ 에 보관 → GitHub 비밀 값으로 올리기 (gh 로그인 필요)
+```
+
+- `.signing/release.p12`·`release.password` 에 보관하고(git 제외), 개발용 키체인에도 넣어 `run.sh`·손으로 돌리는 `release.sh` 가 같은 인증서를 쓴다.
+- 저장소 비밀 값 `SELF_SIGNED_P12_BASE64`, `SELF_SIGNED_P12_PASSWORD` 가 있으면 Actions 가 이것으로 서명하고, 있는데 못 찾으면 ad-hoc 으로 내지 않고 실패한다.
+- **인증서를 바꾸면 모든 사용자가 권한을 한 번 다시 설정해야 한다.** `.signing/` 을 지우거나 새 저장소에 받았다면, 백업해 둔 `release.p12`·`release.password` 를
+  `.signing/` 에 다시 넣고 실행한다 (없으면 새로 만든다).
 
 ### 공증된 릴리스 만들기
 
@@ -267,7 +283,7 @@ Config/           Info.plist, entitlements (샌드박스 끔 — 다른 앱 창�
 GazeNotification/Localizable.xcstrings, InfoPlist.xcstrings   언어팩 (String Catalog)
 GazeNotificationTests/    단위 테스트 (Swift Testing)
 GazeNotificationUITests/  UI 테스트 (XCUITest)
-scripts/          run · test · release · publish-release · check-localization · debug
+scripts/          run · test · release · release-signing · publish-release · check-localization · debug
 site/             홈페이지 (GitHub Pages)
 .github/workflows/ ci (단위 테스트) · release (태그 → DMG → 릴리스) · pages (홈페이지)
 ```

@@ -1,9 +1,11 @@
 # 태그 v* 를 올리면: 단위 테스트 → universal 빌드·서명(·공증) → DMG → GitHub 릴리스
 #
-# 공증된 릴리스를 만들려면 저장소 Settings → Secrets and variables → Actions 에 넣는다 (README 의 "배포" 참고):
-#   DEVELOPER_ID_P12_BASE64, DEVELOPER_ID_P12_PASSWORD   Developer ID Application 인증서(.p12)
+# 서명에 쓰는 저장소 비밀 값 (Settings → Secrets and variables → Actions, README 의 "배포" 참고):
+#   DEVELOPER_ID_P12_BASE64, DEVELOPER_ID_P12_PASSWORD   Developer ID Application 인증서(.p12) → 공증까지
 #   NOTARY_KEY_P8_BASE64, NOTARY_KEY_ID, NOTARY_ISSUER_ID App Store Connect API 키
-# 없으면 ad-hoc 서명으로 만들고, 릴리스 설명과 홈페이지에 Gatekeeper 안내가 붙는다.
+#   SELF_SIGNED_P12_BASE64, SELF_SIGNED_P12_PASSWORD     Developer ID 가 없을 때 쓰는 자체 서명 인증서 (scripts/release-signing.sh 가 올림).
+#                                                         공증은 못 하지만 서명이 버전마다 같아 업데이트해도 권한이 유지된다
+# 아무것도 없으면 ad-hoc 서명으로 만든다. 공증이 없으면 릴리스 설명과 홈페이지에 Gatekeeper 안내가 붙는다.
 name: Release
 
 on:
@@ -24,6 +26,7 @@ jobs:
       # secrets 는 if: 에 바로 못 쓰므로 있는지만 환경 변수로 옮긴다
       HAS_DEVELOPER_ID: ${{ secrets.DEVELOPER_ID_P12_BASE64 != '' }}
       HAS_NOTARY_KEY: ${{ secrets.NOTARY_KEY_P8_BASE64 != '' }}
+      HAS_SELF_SIGNED: ${{ secrets.SELF_SIGNED_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,6 +60,25 @@ jobs:
           rm "$RUNNER_TEMP/developer-id.p12"
           security find-identity -v -p codesigning "$KEYCHAIN"
 
+      - name: 자체 서명 인증서 가져오기
+        if: env.HAS_DEVELOPER_ID != 'true' && env.HAS_SELF_SIGNED == 'true'
+        env:
+          P12_BASE64: ${{ secrets.SELF_SIGNED_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.SELF_SIGNED_P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/self-signed.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/self-signed.p12" -P "$P12_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/self-signed.p12"
+          # 신뢰 체인이 없는 인증서라 "valid" 목록에는 안 나온다. 이름(GazeNotification)과 SHA-1 만 확인
+          security find-identity -p codesigning "$KEYCHAIN"
+
       - name: 공증 키 준비
         if: env.HAS_NOTARY_KEY == 'true'
         env:
@@ -71,6 +93,8 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
           # 인증서를 넣었다면 공증까지 못 했을 때 실패로 끝낸다 (반쯤 서명된 릴리스를 올리지 않게)
           REQUIRE_NOTARIZATION: ${{ env.HAS_DEVELOPER_ID == 'true' && '1' || '' }}
+          # 인증서를 넣었는데 못 찾아 ad-hoc 으로 떨어지면 실패 (업데이트한 사용자의 권한이 풀리므로)
+          REQUIRE_SIGNING: ${{ (env.HAS_DEVELOPER_ID == 'true' || env.HAS_SELF_SIGNED == 'true') && '1' || '' }}
         run: scripts/release.sh "$GITHUB_REF_NAME"
 
       - name: GitHub 릴리스 올리기
@@ -79,5 +103,5 @@ jobs:
         run: scripts/publish-release.sh
 
       - name: 키체인 정리
-        if: always() && env.HAS_DEVELOPER_ID == 'true'
+        if: always() && (env.HAS_DEVELOPER_ID == 'true' || env.HAS_SELF_SIGNED == 'true')
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
