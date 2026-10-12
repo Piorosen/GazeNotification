@@ -75,6 +75,14 @@ struct GeometryAndModeTests {
         #expect(NotificationMover.windowX(slotX: 7680 - 16 - 344, rightMargin: 16, bannerWidth: 344, windowWidth: 7680) == 0)
     }
 
+    @Test("바탕화면 위젯 창은 창 서버 frame 과 2pt 안에서 같을 때만 같은 창으로 본다")
+    func desktopWindowMatching() {
+        let widget = CGRect(x: 188, y: 38, width: 180, height: 180)
+        #expect(NotificationMover.sameFrame(widget, CGRect(x: 188.5, y: 37.5, width: 180, height: 180)))
+        #expect(!NotificationMover.sameFrame(widget, CGRect(x: 8, y: 38, width: 180, height: 180)))
+        #expect(!NotificationMover.sameFrame(widget, Self.screen))   // 알림 창(화면 전체)과는 다르다
+    }
+
     @Test("화면이 배너보다 좁아도 뒤집히지 않는다")
     func tinyScreen() {
         let tiny = CGRect(x: 0, y: 0, width: 300, height: 200)

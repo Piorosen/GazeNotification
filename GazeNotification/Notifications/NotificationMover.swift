@@ -8,7 +8,8 @@ private let bannerSubroles: Set<String> = [
     "AXNotificationCenterBanner", "AXNotificationCenterAlert",
     "AXNotificationCenterBannerStack", "AXNotificationCenterAlertStack",
 ]
-/// 알림 센터 패널(위젯 목록)이 열려 있을 때 위젯 요소의 AXIdentifier 접두사
+/// 알림 센터 패널(위젯 목록)이 열려 있을 때 위젯 요소의 AXIdentifier 접두사.
+/// 바탕화면 위젯도 같은 접두사를 쓰므로 바탕화면 위젯 창은 미리 걸러 낸다 (`desktopWindowFrames`)
 private let widgetIdentifierPrefix = "widget-local"
 
 /// NotificationCenter 의 알림 창을 Accessibility API 로 옮겨, 배너가 `targetProvider` 의 가로 위치에 뜨게 한다.
@@ -17,6 +18,12 @@ private let widgetIdentifierPrefix = "widget-local"
 /// 슬라이드해 들어온다. 이 창은 알림이 없을 때도 유지되므로
 /// - **알림이 없을 때 미리 창을 옮겨 두면(사전 배치)** 다음 알림이 처음부터 시선 위치에 뜬다 (지연·떨림 없음).
 /// - 배너 자체가 아니라 창의 "배너 슬롯" 위치를 제어하므로 슬라이드 인/아웃 애니메이션과 싸우지 않는다.
+///
+/// macOS 27: 알림이 사라지면 창의 AX 요소가 없어지고, 다음 알림 때 원위치(0,0)로 다시 만들어진다.
+/// 그래서 사전 배치는 실패하고(요소 무효) 알림이 뜬 직후 옮기는 방식으로 동작한다.
+///
+/// 바탕화면 위젯도 NotificationCenter 의 창이다. 바탕화면 레벨에 늘 떠 있으므로 표시 여부 확인과 AX 탐색에서 뺀다
+/// (안 빼면 알림이 늘 떠 있는 것으로, 위젯은 알림 센터 패널이 열린 것으로 오인해 알림 창을 계속 원위치시킨다).
 ///
 /// 자원 절약: 알림이 없을 땐 AX 호출 없이 창 서버의 표시 여부(CGWindowList)만 가볍게 확인한다.
 @MainActor
@@ -69,8 +76,10 @@ final class NotificationMover {
     private var screenObserver: NSObjectProtocol?
     private var lastAttachAttempt: Date = .distantPast
 
-    // 창 서버 쪽 창 ID (표시 여부 확인용)
+    // 창 서버 쪽 창 ID (표시 여부 확인용, 바탕화면 위젯 제외)
     private var windowIDs: [CGWindowID] = []
+    /// 바탕화면 위젯 창의 위치·크기 (AX 좌표와 같은 전역 좌표). AX 탐색에서 이 창들을 건너뛴다
+    private var desktopWindowFrames: [CGRect] = []
     private var lastWindowIDRefresh: CFTimeInterval = 0
 
     /// 배너가 들어 있는 전체 화면 창
@@ -92,6 +101,8 @@ final class NotificationMover {
     private var panelOpen = false
     private var wasOnscreen = false
     private var onscreenSince: CFTimeInterval = 0
+    /// 이번에 알림 창이 보이는 동안 배너를 찾았는지 (macOS 27 은 배너가 사라진 뒤에도 창이 몇 초 더 보인다)
+    private var bannerSeenWhileOnscreen = false
     private var fastUntil: CFTimeInterval = 0
     private var lastFullScan: CFTimeInterval = 0
     private var lastPreposition: CFTimeInterval = 0
@@ -271,6 +282,7 @@ final class NotificationMover {
         let onscreen = notificationWindowsOnscreen(now: now)
         if onscreen && !wasOnscreen {
             onscreenSince = now
+            bannerSeenWhileOnscreen = false
             fastUntil = max(fastUntil, now + 1.0)
         }
         if onscreen != wasOnscreen { onVisibilityChange?(onscreen) }
@@ -303,19 +315,46 @@ final class NotificationMover {
     /// 창 서버에 NotificationCenter 창이 화면에 보이는지 묻는다 (AX IPC 보다 훨씬 가벼움).
     private func notificationWindowsOnscreen(now: CFTimeInterval) -> Bool {
         windowCheckCount += 1
-        if windowIDs.isEmpty || now - lastWindowIDRefresh > 5 {
-            lastWindowIDRefresh = now
-            let all = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
-            windowIDs = all.compactMap { info in
-                guard (info[kCGWindowOwnerPID as String] as? pid_t) == pid else { return nil }
-                return info[kCGWindowNumber as String] as? CGWindowID
-            }
-        }
+        if windowIDs.isEmpty || now - lastWindowIDRefresh > 5 { refreshWindowList(now: now) }
         guard !windowIDs.isEmpty else { return true } // 모르면 AX 로 직접 확인
         var values: [UnsafeRawPointer?] = windowIDs.map { UnsafeRawPointer(bitPattern: UInt($0)) }
         guard let array = CFArrayCreate(nil, &values, values.count, nil),
               let descriptions = CGWindowListCreateDescriptionFromArray(array) as? [[String: Any]] else { return true }
         return descriptions.contains { ($0[kCGWindowIsOnscreen as String] as? Bool) == true }
+    }
+
+    /// NotificationCenter 의 창 목록을 창 서버에서 다시 읽는다.
+    /// 바탕화면 레벨(음수 layer)의 창은 바탕화면 위젯이라 늘 화면에 보이므로 표시 여부 확인에서 빼고 위치만 기억해 둔다.
+    private func refreshWindowList(now: CFTimeInterval) {
+        lastWindowIDRefresh = now
+        let all = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+        var ids: [CGWindowID] = []
+        var desktopFrames: [CGRect] = []
+        for info in all where (info[kCGWindowOwnerPID as String] as? pid_t) == pid {
+            guard let id = info[kCGWindowNumber as String] as? CGWindowID else { continue }
+            if (info[kCGWindowLayer as String] as? Int ?? 0) < 0 {
+                if let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                   let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary) {
+                    desktopFrames.append(frame)
+                }
+            } else {
+                ids.append(id)
+            }
+        }
+        windowIDs = ids
+        desktopWindowFrames = desktopFrames
+    }
+
+    /// 바탕화면 위젯 창인지 (창 서버에서 바탕화면 레벨에 있는 창과 위치·크기가 같은지)
+    private func isDesktopWindow(_ window: AXUIElement) -> Bool {
+        guard !desktopWindowFrames.isEmpty, AX.string(window, kAXSubroleAttribute) != "AXSystemDialog",
+              let frame = AX.frame(window) else { return false }
+        return desktopWindowFrames.contains { Self.sameFrame($0, frame) }
+    }
+
+    nonisolated static func sameFrame(_ a: CGRect, _ b: CGRect, tolerance: CGFloat = 2) -> Bool {
+        abs(a.minX - b.minX) < tolerance && abs(a.minY - b.minY) < tolerance
+            && abs(a.width - b.width) < tolerance && abs(a.height - b.height) < tolerance
     }
 
     // MARK: - 알림이 보일 때
@@ -344,13 +383,14 @@ final class NotificationMover {
 
             guard let (window, banner) = result.banner, let frame = AX.frame(banner), frame.width > 40 else {
                 bannerVisible = false
-                if !dumpedMissingBanner, wasOnscreen, now - onscreenSince > 1.5 {
+                if !dumpedMissingBanner, !bannerSeenWhileOnscreen, wasOnscreen, now - onscreenSince > 1.5 {
                     dumpedMissingBanner = true
                     let url = dumpAllWindows(named: "ax-dump-nobanner.txt")
                     Log.error("알림 창이 보이는데 배너를 찾지 못함 — \(url?.path ?? "덤프 실패")")
                 }
                 return
             }
+            bannerSeenWhileOnscreen = true
             if container.map({ !CFEqual($0.window, window) }) ?? true { adoptContainer(window) }
             container?.bannerWidth = frame.width
             if !dumpedBannerTree {
@@ -434,7 +474,12 @@ final class NotificationMover {
         lastPreposition = now
         if !placeSlot(at: desired), !reportedPlacementFailure {
             reportedPlacementFailure = true
-            Log.error("알림 창 사전 배치 실패 — 알림이 뜬 뒤 옮기는 방식으로 동작")
+            if self.container == nil {
+                // macOS 27: 알림이 사라지면 창의 AX 요소도 없어진다 (다음 알림 때 원위치로 다시 생김)
+                Log.info("알림이 없을 땐 알림 창을 옮길 수 없음 — 알림이 뜬 직후 옮기는 방식으로 동작")
+            } else {
+                Log.error("알림 창 사전 배치 실패 — 알림이 뜬 뒤 옮기는 방식으로 동작")
+            }
         }
     }
 
@@ -507,12 +552,21 @@ final class NotificationMover {
         adoptContainer(window)
     }
 
-    /// 모든 창에서 배너와 위젯(패널)을 찾는다.
+    /// 바탕화면 위젯 창을 뺀 모든 창에서 배너와 위젯(패널)을 찾는다.
     private func scanWindows(of app: AXUIElement) -> (banner: (AXUIElement, AXUIElement)?, panel: Bool) {
         var found: (AXUIElement, AXUIElement)?
-        for window in AX.windows(of: app).windows {
+        var refreshed = false
+        for window in AX.windows(of: app).windows where !isDesktopWindow(window) {
             let result = scan(window)
-            if result.isPanel { return (nil, true) }
+            if result.isPanel {
+                // 방금 위젯을 추가하거나 옮겼으면 바탕화면 위젯 목록이 낡았을 수 있어 한 번 다시 읽고 확인한다
+                if !refreshed {
+                    refreshed = true
+                    refreshWindowList(now: CACurrentMediaTime())
+                    if isDesktopWindow(window) { continue }
+                }
+                return (nil, true)
+            }
             if found == nil, let banner = result.banner { found = (window, banner) }
         }
         return (found, false)
